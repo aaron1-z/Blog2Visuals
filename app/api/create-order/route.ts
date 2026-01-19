@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
-// Razorpay configuration
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-});
+// Ensure this route uses the Node.js runtime (required for Razorpay + crypto)
+export const runtime = "nodejs";
 
 // Generate a random receipt ID
 function generateReceiptId(): string {
@@ -23,6 +20,12 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Initialize Razorpay INSIDE the handler to avoid build-time issues
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
 
     // Parse request body (optional: can include user_id for tracking)
     let userId: string | null = null;
@@ -47,11 +50,11 @@ export async function POST(request: NextRequest) {
 
     // Add timeout to Razorpay API call (45 seconds)
     const orderPromise = razorpay.orders.create(options);
-    const timeoutPromise = new Promise((_, reject) => {
+    const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error("Razorpay API timeout")), 45000);
     });
 
-    const order = await Promise.race([orderPromise, timeoutPromise]) as {
+    const order = (await Promise.race([orderPromise, timeoutPromise])) as {
       id: string;
       amount: number;
       currency: string;
@@ -77,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Handle specific errors
     if (error instanceof Error) {
       // Check for timeout
-      if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+      if (error.message.toLowerCase().includes("timeout")) {
         return NextResponse.json(
           { error: "Payment service is slow. Please try again in a moment." },
           { status: 504 }
@@ -85,7 +88,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Check for authentication errors
-      if (error.message.includes("authentication") || error.message.includes("401")) {
+      if (
+        error.message.toLowerCase().includes("authentication") ||
+        error.message.includes("401")
+      ) {
         return NextResponse.json(
           { error: "Payment authentication failed. Please contact support." },
           { status: 401 }
@@ -93,7 +99,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Check for network errors
-      if (error.message.includes("ECONNREFUSED") || error.message.includes("ENOTFOUND")) {
+      if (
+        error.message.includes("ECONNREFUSED") ||
+        error.message.includes("ENOTFOUND")
+      ) {
         return NextResponse.json(
           { error: "Cannot connect to payment service. Please try again later." },
           { status: 503 }
