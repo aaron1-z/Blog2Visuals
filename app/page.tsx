@@ -507,9 +507,8 @@ export default function Home() {
     setError(null);
 
     try {
-      // Step 1: Deduct credit in Supabase (if user is authenticated)
+      // Step 1: Deduct credit FIRST (before export) - strict enforcement
       if (user?.id) {
-        // Get auth headers for secure API call
         const authHeaders = await getAuthHeaders();
         
         const deductResponse = await fetch("/api/deduct-credit", {
@@ -521,13 +520,11 @@ export default function Home() {
         const deductData = await deductResponse.json();
 
         if (!deductResponse.ok || !deductData.success) {
-          // Handle unauthorized access
           if (deductResponse.status === 401 || deductResponse.status === 403) {
             setError("Session expired. Please login again.");
             setIsExporting(false);
             return;
           }
-          // Prevent negative credits - stop if insufficient
           if (deductData.error === "Insufficient credits") {
             setError("No credits remaining. Please purchase more credits.");
             setIsExporting(false);
@@ -536,38 +533,64 @@ export default function Home() {
           throw new Error(deductData.error || "Failed to deduct credit");
         }
 
-        // Step 2: Update UI credit count immediately with response from server
+        // Update UI immediately
         setPaidCredits(deductData.credits);
         localStorage.setItem(CREDITS_KEY, deductData.credits.toString());
+      } else {
+        // For non-authenticated users, check localStorage limit
+        if (downloadCount >= FREE_DOWNLOAD_LIMIT) {
+          setError("Free limit reached. Please sign up to get more credits.");
+          setIsExporting(false);
+          return;
+        }
       }
 
-      // Step 3: Get the actual infographic element inside the container
+      // Step 2: Get the actual infographic element
       const element = infographicRef.current.querySelector(".aspect-square") as HTMLElement;
       if (!element) {
         throw new Error("Infographic element not found");
       }
 
-      // Generate PNG with high quality
-      const dataUrl = await toPng(element, {
-        quality: 1,
-        pixelRatio: 2, // 2x for retina/high-res (1080x1080 becomes 2160x2160)
+      // Step 3: Optimize PNG generation with timeout
+      const exportPromise = toPng(element, {
+        quality: 0.95, // Slightly lower quality for faster export
+        pixelRatio: 2,
         cacheBust: true,
-        backgroundColor: undefined,
+        backgroundColor: "#0c0a09", // Match background
+        filter: (node) => {
+          // Filter out any elements that shouldn't be exported
+          return !(node as HTMLElement).classList?.contains("no-export");
+        },
       });
 
-      // Create download link
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Export timed out. Please try again.")), 30000);
+      });
+
+      const dataUrl = await Promise.race([exportPromise, timeoutPromise]);
+
+      // Step 4: Create and trigger download
       const link = document.createElement("a");
       link.download = `blog2visuals-infographic-${Date.now()}.png`;
       link.href = dataUrl;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
 
-      // Increment local download count (for tracking)
-      const newCount = downloadCount + 1;
-      setDownloadCount(newCount);
-      localStorage.setItem(STORAGE_KEY, newCount.toString());
+      // Step 5: Update local tracking (only for non-authenticated users)
+      if (!user?.id) {
+        const newCount = downloadCount + 1;
+        setDownloadCount(newCount);
+        localStorage.setItem(STORAGE_KEY, newCount.toString());
+      }
     } catch (err) {
       console.error("Error exporting image:", err);
-      setError(err instanceof Error ? err.message : "Failed to export image. Please try again.");
+      if (err instanceof Error && err.message.includes("timed out")) {
+        setError("Export is taking too long. Please try again or refresh the page.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to export image. Please try again.");
+      }
     } finally {
       setIsExporting(false);
     }
@@ -640,9 +663,9 @@ export default function Home() {
             </Link>
             
             <div className="hidden md:flex items-center gap-8">
-              <Link href="/features" className="text-sm text-stone-400 hover:text-white transition-colors">Features</Link>
-              <Link href="/pricing" className="text-sm text-stone-400 hover:text-white transition-colors">Pricing</Link>
-              <Link href="/examples" className="text-sm text-stone-400 hover:text-white transition-colors">Examples</Link>
+              <a href="#features" className="text-sm text-stone-400 hover:text-white transition-colors cursor-pointer">Features</a>
+              <a href="#pricing" className="text-sm text-stone-400 hover:text-white transition-colors cursor-pointer">Pricing</a>
+              <a href="#examples" className="text-sm text-stone-400 hover:text-white transition-colors cursor-pointer">Examples</a>
             </div>
 
             <Link 
@@ -1299,50 +1322,201 @@ export default function Home() {
             </div>
           )}
 
-          {/* Features hint */}
+          {/* Features Section - Scroll Reveal */}
           {step === "input" && !error && (
-            <div className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-              {[
-                {
-                  icon: (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  ),
-                  title: "Lightning Fast",
-                  desc: "Generate visuals in under 30 seconds"
-                },
-                {
-                  icon: (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                    </svg>
-                  ),
-                  title: "Brand Ready",
-                  desc: "Customize colors, fonts & layouts"
-                },
-                {
-                  icon: (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                    </svg>
-                  ),
-                  title: "Share Anywhere",
-                  desc: "Optimized for all social platforms"
-                }
-              ].map((feature, i) => (
-                <div 
-                  key={i} 
-                  className="group p-6 rounded-2xl bg-[#1c1917]/50 border border-stone-800 hover:border-stone-700 hover:bg-[#1c1917] transition-all duration-300"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400 mb-4 group-hover:scale-110 transition-transform duration-300">
-                    {feature.icon}
+            <>
+              <section id="features" className="mt-32 py-16 scroll-mt-20" style={{ scrollBehavior: 'smooth' }}>
+                <div className="max-w-6xl mx-auto px-6">
+                  <div className="text-center mb-12">
+                    <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
+                      Powerful Features
+                    </h2>
+                    <p className="text-stone-400 text-lg">Everything you need to create stunning infographics</p>
                   </div>
-                  <h3 className="font-semibold text-white mb-2" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>{feature.title}</h3>
-                  <p className="text-sm text-stone-400">{feature.desc}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {[
+                      {
+                        icon: (
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        ),
+                        title: "Lightning Fast",
+                        desc: "Generate visuals in under 30 seconds"
+                      },
+                      {
+                        icon: (
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                          </svg>
+                        ),
+                        title: "Brand Ready",
+                        desc: "Customize colors, fonts & layouts"
+                      },
+                      {
+                        icon: (
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                          </svg>
+                        ),
+                        title: "Share Anywhere",
+                        desc: "Optimized for all social platforms"
+                      }
+                    ].map((feature, i) => (
+                      <div 
+                        key={i} 
+                        className="group p-6 rounded-2xl bg-[#1c1917]/50 border border-stone-800 hover:border-stone-700 hover:bg-[#1c1917] transition-all duration-300"
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/10 to-amber-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400 mb-4 group-hover:scale-110 transition-transform duration-300">
+                          {feature.icon}
+                        </div>
+                        <h3 className="font-semibold text-white mb-2" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>{feature.title}</h3>
+                        <p className="text-sm text-stone-400">{feature.desc}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-        </div>
+              </section>
+
+              {/* Pricing Section - Scroll Reveal */}
+              <section id="pricing" className="mt-32 py-16 scroll-mt-20" style={{ scrollBehavior: 'smooth' }}>
+                <div className="max-w-6xl mx-auto px-6">
+                  <div className="text-center mb-12">
+                    <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
+                      Simple Pricing
+                    </h2>
+                    <p className="text-stone-400 text-lg">Choose the plan that works for you</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                    {[
+                      {
+                        name: "Free",
+                        price: "₹0",
+                        period: "forever",
+                        features: ["1 free export", "All themes", "AI summarization", "Social captions"],
+                        cta: "Get Started",
+                        ctaLink: "#",
+                        popular: false,
+                      },
+                      {
+                        name: "Pro Pack",
+                        price: "₹199",
+                        period: "one-time",
+                        features: ["10 export credits", "All themes", "AI summarization", "Priority support"],
+                        cta: "Buy Now",
+                        ctaLink: "#",
+                        popular: true,
+                        onClick: handlePayment,
+                      },
+                      {
+                        name: "Business",
+                        price: "₹999",
+                        period: "one-time",
+                        features: ["50 export credits", "All themes", "Priority support", "Custom branding (soon)"],
+                        cta: "Contact Sales",
+                        ctaLink: "/contact",
+                        popular: false,
+                      },
+                    ].map((plan, i) => (
+                      <div
+                        key={i}
+                        className={`p-8 rounded-2xl border transition-all duration-300 ${
+                          plan.popular
+                            ? "bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/30 scale-105"
+                            : "bg-[#1c1917]/50 border-stone-800 hover:border-stone-700"
+                        }`}
+                      >
+                        {plan.popular && (
+                          <div className="inline-block px-3 py-1 mb-4 rounded-full bg-orange-500/20 text-orange-400 text-xs font-semibold">
+                            Most Popular
+                          </div>
+                        )}
+                        <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                        <div className="mb-4">
+                          <span className="text-4xl font-bold text-white">{plan.price}</span>
+                          <span className="text-stone-400 ml-2">/{plan.period}</span>
+                        </div>
+                        <ul className="space-y-3 mb-6">
+                          {plan.features.map((feature, j) => (
+                            <li key={j} className="flex items-center gap-2 text-stone-300 text-sm">
+                              <svg className="w-5 h-5 text-orange-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                        {plan.onClick ? (
+                          <button
+                            onClick={plan.onClick}
+                            disabled={isProcessingPayment}
+                            className={`w-full py-3 px-6 rounded-xl font-semibold transition-all ${
+                              plan.popular
+                                ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white"
+                                : "bg-white/5 hover:bg-white/10 text-white border border-white/10"
+                            }`}
+                          >
+                            {isProcessingPayment ? "Processing..." : plan.cta}
+                          </button>
+                        ) : (
+                          <Link
+                            href={plan.ctaLink}
+                            className={`block w-full py-3 px-6 rounded-xl font-semibold text-center transition-all ${
+                              plan.popular
+                                ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white"
+                                : "bg-white/5 hover:bg-white/10 text-white border border-white/10"
+                            }`}
+                          >
+                            {plan.cta}
+                          </Link>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* Examples Section - Scroll Reveal */}
+              <section id="examples" className="mt-32 py-16 scroll-mt-20" style={{ scrollBehavior: 'smooth' }}>
+                <div className="max-w-6xl mx-auto px-6">
+                  <div className="text-center mb-12">
+                    <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
+                      See It In Action
+                    </h2>
+                    <p className="text-stone-400 text-lg">Real examples from real blogs</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[
+                      { title: "Tech Blog", theme: "sunset" as Theme, summary: "AI is revolutionizing software development with automated code generation and intelligent debugging." },
+                      { title: "Marketing Guide", theme: "ocean" as Theme, summary: "Content marketing requires video content, AI personalization, and authentic storytelling." },
+                      { title: "Productivity Tips", theme: "forest" as Theme, summary: "Remote work productivity: time-blocking, digital minimalism, and async communication." },
+                    ].map((example, i) => (
+                      <div
+                        key={i}
+                        className="group p-6 rounded-2xl bg-[#1c1917]/50 border border-stone-800 hover:border-stone-700 transition-all duration-300"
+                      >
+                        <div className="aspect-square mb-4 rounded-xl overflow-hidden bg-gradient-to-br from-orange-500/20 to-amber-500/20 flex items-center justify-center">
+                          <InfographicPreview summary={example.summary} theme={example.theme} />
+                        </div>
+                        <h3 className="font-semibold text-white mb-2">{example.title}</h3>
+                        <p className="text-sm text-stone-400 line-clamp-2">{example.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-center mt-8">
+                    <Link
+                      href="/examples"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all"
+                    >
+                      View More Examples
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            </>
           )}
       </main>
 

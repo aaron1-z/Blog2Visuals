@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prevent layout shift during loading */
+.loading-skeleton {
+  background: linear-gradient(90deg, #1c1917 25%, #292524 50%, #1c1917 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 :root {
   --background: #0c0a09;
   --foreground: #fafaf9;

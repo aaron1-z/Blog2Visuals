@@ -2,11 +2,134 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+
+// Declare Razorpay types
+declare global {
+  interface Window {
+    Razorpay: new (options: any) => any;
+  }
+}
 
 export default function PricingPage() {
-  const { isAuthenticated } = useAuth();
-  const [isAnnual, setIsAnnual] = useState(false);
+  const { isAuthenticated, user } = useAuth();
+  const router = useRouter();
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load Razorpay script
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
+
+  const handlePayment = async () => {
+    if (typeof window.Razorpay === "undefined") {
+      setError("Payment system is loading. Please wait a moment and try again.");
+      return;
+    }
+
+    if (isProcessingPayment) return;
+
+    setIsProcessingPayment(true);
+    setError(null);
+
+    try {
+      // Create order
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+
+      const orderResponse = await fetch("/api/create-order", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ user_id: user?.id || null }),
+      });
+
+      const orderData = await orderResponse.json();
+
+      if (!orderResponse.ok || !orderData.order_id) {
+        throw new Error(orderData.error || "Failed to create payment order");
+      }
+
+      // Open Razorpay
+      const options = {
+        key: orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY || "",
+        amount: orderData.amount,
+        currency: orderData.currency || "INR",
+        name: "Blog2Visuals",
+        description: "Pro Pack - 10 Exports",
+        order_id: orderData.order_id,
+        handler: async function (response: any) {
+          try {
+            const verifyHeaders: Record<string, string> = { "Content-Type": "application/json" };
+            if (session?.access_token) {
+              verifyHeaders["Authorization"] = `Bearer ${session.access_token}`;
+            }
+
+            const verifyResponse = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: verifyHeaders,
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                user_id: user?.id || null,
+              }),
+            });
+
+            const verifyData = await verifyResponse.json();
+
+            if (verifyResponse.ok && verifyData.success) {
+              // Redirect to dashboard or homepage
+              router.push("/dashboard?payment=success");
+            } else {
+              setError(verifyData.error || "Payment verification failed");
+            }
+          } catch (err) {
+            setError("Payment verification failed. Please contact support.");
+          } finally {
+            setIsProcessingPayment(false);
+          }
+        },
+        prefill: {
+          email: user?.email || "",
+        },
+        theme: {
+          color: "#f97316",
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessingPayment(false);
+            setError("Payment cancelled.");
+            setTimeout(() => setError(null), 3000);
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.on("payment.failed", function (response: any) {
+        setIsProcessingPayment(false);
+        setError("Payment failed. Please try again.");
+      });
+      razorpay.open();
+    } catch (err) {
+      console.error("Payment error:", err);
+      setError(err instanceof Error ? err.message : "Failed to initiate payment");
+      setIsProcessingPayment(false);
+    }
+  };
 
   const plans = [
     {
@@ -177,16 +300,30 @@ export default function PricingPage() {
                   ))}
                 </ul>
 
-                <Link
-                  href={plan.ctaLink}
-                  className={`w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 ${
-                    plan.popular
-                      ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
-                      : "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white"
-                  }`}
-                >
-                  {plan.cta}
-                </Link>
+                {plan.name === "Pro Pack" && isAuthenticated ? (
+                  <button
+                    onClick={handlePayment}
+                    disabled={isProcessingPayment}
+                    className={`w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 ${
+                      plan.popular
+                        ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                        : "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white"
+                    }`}
+                  >
+                    {isProcessingPayment ? "Processing..." : plan.cta}
+                  </button>
+                ) : (
+                  <Link
+                    href={plan.name === "Pro Pack" && !isAuthenticated ? "/login" : plan.ctaLink}
+                    className={`w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 ${
+                      plan.popular
+                        ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
+                        : "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white"
+                    }`}
+                  >
+                    {plan.cta}
+                  </Link>
+                )}
               </div>
             ))}
           </div>
@@ -236,6 +373,26 @@ export default function PricingPage() {
             ))}
           </div>
         </section>
+
+        {/* Error Message */}
+        {error && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md mx-auto px-6 py-4 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl shadow-lg">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="ml-auto text-red-400/60 hover:text-red-400"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* CTA */}
         <section className="max-w-6xl mx-auto px-6 py-16">

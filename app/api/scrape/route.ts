@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
+export const runtime = "nodejs";
+
 const MAX_CONTENT_LENGTH = 4000;
 
 export async function POST(request: NextRequest) {
@@ -117,22 +119,29 @@ export async function POST(request: NextRequest) {
       .replace(/\n\s*\n/g, "\n\n") // Normalize line breaks
       .trim();
 
-    // Limit content length
+    // Limit content length - but preserve more content for better summarization
     if (content.length > MAX_CONTENT_LENGTH) {
-      // Try to cut at a sentence boundary
+      // Try to cut at a paragraph boundary first (double newline)
       const truncated = content.substring(0, MAX_CONTENT_LENGTH);
-      const lastSentenceEnd = Math.max(
-        truncated.lastIndexOf("."),
-        truncated.lastIndexOf("!"),
-        truncated.lastIndexOf("?")
-      );
+      const lastParagraphEnd = truncated.lastIndexOf("\n\n");
       
-      if (lastSentenceEnd > MAX_CONTENT_LENGTH * 0.8) {
-        content = truncated.substring(0, lastSentenceEnd + 1);
+      if (lastParagraphEnd > MAX_CONTENT_LENGTH * 0.7) {
+        content = truncated.substring(0, lastParagraphEnd).trim();
       } else {
-        // Cut at last word boundary
-        const lastSpace = truncated.lastIndexOf(" ");
-        content = truncated.substring(0, lastSpace) + "...";
+        // Try sentence boundary
+        const lastSentenceEnd = Math.max(
+          truncated.lastIndexOf("."),
+          truncated.lastIndexOf("!"),
+          truncated.lastIndexOf("?")
+        );
+        
+        if (lastSentenceEnd > MAX_CONTENT_LENGTH * 0.8) {
+          content = truncated.substring(0, lastSentenceEnd + 1);
+        } else {
+          // Cut at last word boundary
+          const lastSpace = truncated.lastIndexOf(" ");
+          content = truncated.substring(0, lastSpace) + "...";
+        }
       }
     }
 

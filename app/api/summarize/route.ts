@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 const HUGGINGFACE_API_URL =
   "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn";
 
@@ -54,9 +56,11 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           inputs: truncatedContent,
           parameters: {
-            max_length: 150,
-            min_length: 30,
+            max_length: 200, // Increased for more complete summaries
+            min_length: 50, // Increased minimum length
             do_sample: false,
+            num_beams: 4, // Better quality
+            early_stopping: true,
           },
         }),
         signal: controller.signal,

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const runtime = "nodejs";
+
 // Initialize Supabase with service role for server-side operations
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -83,57 +85,62 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 4: Atomic update - decrement by 1 only if credits > 0
-    // Using a raw SQL query for atomic operation
+    // Use atomic update with WHERE clause to prevent race conditions
+    const newCredits = currentCredits - 1;
+    
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
-      .rpc('decrement_credit', { user_uuid: user_id });
+      .from("profiles")
+      .update({ credits: newCredits })
+      .eq("id", user_id)
+      .gt("credits", 0) // CRITICAL: Only update if credits > 0 (prevents negative)
+      .select("credits")
+      .single();
 
-    // If RPC doesn't exist, fall back to regular update with check
-    if (updateError && updateError.message.includes('function')) {
-      // Fallback: Regular update with WHERE clause to prevent negative
-      const newCredits = currentCredits - 1;
-      
-      const { error: fallbackError } = await supabaseAdmin
-        .from("profiles")
-        .update({ credits: newCredits })
-        .eq("id", user_id)
-        .gt("credits", 0); // Only update if credits > 0
-
-      if (fallbackError) {
-        console.error("Error updating credits:", fallbackError);
-        return NextResponse.json(
-          { error: "Failed to deduct credit" },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        credits: newCredits,
-        deducted: 1,
-        message: "Credit deducted successfully",
-      });
-    }
-
+    // Check if update actually happened (if credits were already 0, update won't affect any rows)
     if (updateError) {
-      console.error("Error in atomic update:", updateError);
+      console.error("Error updating credits:", updateError);
       return NextResponse.json(
         { error: "Failed to deduct credit" },
         { status: 500 }
       );
     }
 
-    // Get the new credit count
-    const { data: newProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("credits")
-      .eq("id", user_id)
-      .single();
+    // Verify the update actually happened
+    if (!updatedProfile || updatedProfile.credits !== newCredits) {
+      // Another process may have deducted credits, or credits were already 0
+      // Re-fetch to get accurate count
+      const { data: refreshedProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("credits")
+        .eq("id", user_id)
+        .single();
 
-    const newCredits = newProfile?.credits ?? (currentCredits - 1);
+      const actualCredits = refreshedProfile?.credits ?? 0;
+      
+      if (actualCredits <= 0) {
+        return NextResponse.json(
+          { 
+            error: "Insufficient credits",
+            credits: 0,
+            success: false 
+          },
+          { status: 400 }
+        );
+      }
 
+      // Credits were deducted by another process, return current count
+      return NextResponse.json({
+        success: true,
+        credits: actualCredits,
+        deducted: currentCredits - actualCredits,
+        message: "Credit deducted successfully",
+      });
+    }
+
+    // Return success with updated credits
     return NextResponse.json({
       success: true,
-      credits: newCredits,
+      credits: updatedProfile.credits,
       deducted: 1,
       message: "Credit deducted successfully",
     });

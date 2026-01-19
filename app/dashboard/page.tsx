@@ -3,7 +3,7 @@
 import { useAuth } from "@/lib/AuthContext";
 import { signOut } from "@/lib/auth";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getProfileByUserId, Profile } from "@/lib/profile";
 import Link from "next/link";
 
@@ -12,16 +12,54 @@ export default function DashboardPage() {
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  // Optimized profile fetching with caching
+  const fetchProfile = useCallback(async () => {
+    if (!user) {
+      setIsLoadingProfile(false);
+      return;
+    }
+
+    setIsLoadingProfile(true);
+    try {
+      // Check cache first (sessionStorage for faster access)
+      const cacheKey = `profile_${user.id}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const cachedProfile = JSON.parse(cached);
+        const cacheTime = cachedProfile._cachedAt || 0;
+        // Use cache if less than 30 seconds old
+        if (Date.now() - cacheTime < 30000) {
+          setProfile(cachedProfile);
+          setIsLoadingProfile(false);
+          return;
+        }
+      }
+
+      const userProfile = await getProfileByUserId(user.id);
+      if (userProfile) {
+        setProfile(userProfile);
+        // Cache the profile
+        sessionStorage.setItem(cacheKey, JSON.stringify({ ...userProfile, _cachedAt: Date.now() }));
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [user]);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (user) {
-        const userProfile = await getProfileByUserId(user.id);
-        setProfile(userProfile);
-      }
-    };
     fetchProfile();
-  }, [user]);
+  }, [fetchProfile]);
+
+  // Refresh profile when user changes
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user?.id]);
 
   const handleSignOut = async () => {
     setIsLoggingOut(true);
@@ -71,7 +109,11 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span className="text-sm text-stone-300">
-                    {profile?.credits ?? 0} credits
+                    {isLoadingProfile ? (
+                      <span className="inline-block w-16 h-4 bg-stone-700 animate-pulse rounded" />
+                    ) : (
+                      `${profile?.credits ?? 0} credits`
+                    )}
                   </span>
                 </div>
                 
@@ -79,6 +121,13 @@ export default function DashboardPage() {
                 <Link
                   href="/#pricing"
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 rounded-lg transition-all shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30"
+                  onClick={(e) => {
+                    // If already on homepage, scroll smoothly
+                    if (window.location.pathname === '/') {
+                      e.preventDefault();
+                      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -146,13 +195,23 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-sm text-stone-400">Available Credits</p>
-                  <p className="text-2xl font-bold text-white">{profile?.credits ?? 0}</p>
+                  {isLoadingProfile ? (
+                    <div className="w-12 h-8 bg-stone-700 animate-pulse rounded mt-1" />
+                  ) : (
+                    <p className="text-2xl font-bold text-white">{profile?.credits ?? 0}</p>
+                  )}
                 </div>
               </div>
               {/* Upgrade Button - Mobile visible */}
               <Link
                 href="/#pricing"
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 rounded-lg transition-all shadow-lg shadow-orange-500/20"
+                onClick={(e) => {
+                  if (window.location.pathname === '/') {
+                    e.preventDefault();
+                    document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
