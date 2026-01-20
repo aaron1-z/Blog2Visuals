@@ -180,7 +180,7 @@ export default function PricingPage() {
       ],
       limitations: ["Limited to 1 download"],
       cta: "Get Started",
-      ctaLink: "/?try=1#try",
+      ctaLink: "/signup",
       popular: false,
     },
     {
