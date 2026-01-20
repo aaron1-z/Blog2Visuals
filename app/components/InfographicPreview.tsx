@@ -125,73 +125,73 @@ export default function InfographicPreview({
   const displayTitle = title || extractTitle(summary);
 
   return (
-    <div className="w-full aspect-square max-w-[540px] mx-auto">
-      {/* Main container - 1:1 ratio */}
+    <div className="w-full aspect-square max-w-[280px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[540px] mx-auto">
+      {/* Main container - 1:1 ratio, responsive sizing */}
       <div
         className={`
-          relative w-full h-full rounded-2xl overflow-hidden
+          relative w-full h-full rounded-xl sm:rounded-2xl overflow-hidden
           bg-gradient-to-br ${themeStyles.bg}
-          shadow-2xl
+          shadow-xl sm:shadow-2xl
         `}
       >
-        {/* Decorative elements */}
+        {/* Decorative elements - scaled for mobile */}
         <div className="absolute inset-0 overflow-hidden">
-          {/* Large circle */}
+          {/* Large circle - smaller on mobile */}
           <div
-            className={`absolute -top-20 -right-20 w-64 h-64 rounded-full ${themeStyles.accent} blur-3xl`}
+            className={`absolute -top-10 sm:-top-20 -right-10 sm:-right-20 w-32 sm:w-48 md:w-64 h-32 sm:h-48 md:h-64 rounded-full ${themeStyles.accent} blur-2xl sm:blur-3xl`}
           />
-          {/* Small circle */}
+          {/* Small circle - smaller on mobile */}
           <div
-            className={`absolute -bottom-10 -left-10 w-48 h-48 rounded-full ${themeStyles.accent} blur-2xl`}
+            className={`absolute -bottom-5 sm:-bottom-10 -left-5 sm:-left-10 w-24 sm:w-36 md:w-48 h-24 sm:h-36 md:h-48 rounded-full ${themeStyles.accent} blur-xl sm:blur-2xl`}
           />
-          {/* Grid pattern overlay */}
+          {/* Grid pattern overlay - smaller grid on mobile */}
           <div
             className="absolute inset-0 opacity-10"
             style={{
               backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-              backgroundSize: "24px 24px",
+              backgroundSize: "16px 16px",
             }}
           />
         </div>
 
-        {/* Content */}
-        <div className="relative z-10 h-full flex flex-col p-8 md:p-10">
-          {/* Top decoration */}
-          <div className="flex items-center gap-2 mb-6">
-            <div className={`w-8 h-1 rounded-full ${themeStyles.bullet}`} />
-            <div className={`w-3 h-1 rounded-full ${themeStyles.bullet} opacity-60`} />
-            <div className={`w-1.5 h-1 rounded-full ${themeStyles.bullet} opacity-40`} />
+        {/* Content - responsive padding */}
+        <div className="relative z-10 h-full flex flex-col p-4 sm:p-6 md:p-8 lg:p-10">
+          {/* Top decoration - smaller on mobile */}
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-3 sm:mb-4 md:mb-6">
+            <div className={`w-5 sm:w-6 md:w-8 h-0.5 sm:h-1 rounded-full ${themeStyles.bullet}`} />
+            <div className={`w-2 sm:w-2.5 md:w-3 h-0.5 sm:h-1 rounded-full ${themeStyles.bullet} opacity-60`} />
+            <div className={`w-1 sm:w-1.5 h-0.5 sm:h-1 rounded-full ${themeStyles.bullet} opacity-40`} />
           </div>
 
-          {/* Title */}
+          {/* Title - responsive text sizes */}
           <h2
             className={`
-              text-2xl md:text-3xl lg:text-4xl font-extrabold leading-tight
-              ${themeStyles.text} mb-8
+              text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-extrabold leading-tight
+              ${themeStyles.text} mb-4 sm:mb-6 md:mb-8
             `}
             style={{ fontFamily: "var(--font-syne), sans-serif" }}
           >
             {displayTitle}
           </h2>
 
-          {/* Bullet points */}
-          <div className="flex-1 flex flex-col justify-center space-y-4">
+          {/* Bullet points - responsive spacing */}
+          <div className="flex-1 flex flex-col justify-center space-y-2 sm:space-y-3 md:space-y-4">
             {bulletPoints.map((point, index) => (
               <div
                 key={index}
-                className="flex items-start gap-3 animate-fade-up"
+                className="flex items-start gap-2 sm:gap-2.5 md:gap-3 animate-fade-up"
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                {/* Bullet */}
-                <div className="flex-shrink-0 mt-2">
+                {/* Bullet - responsive size */}
+                <div className="flex-shrink-0 mt-1 sm:mt-1.5 md:mt-2">
                   <div
-                    className={`w-2.5 h-2.5 rounded-full ${themeStyles.bullet}`}
+                    className={`w-1.5 sm:w-2 md:w-2.5 h-1.5 sm:h-2 md:h-2.5 rounded-full ${themeStyles.bullet}`}
                   />
                 </div>
-                {/* Text */}
+                {/* Text - responsive font size */}
                 <p
                   className={`
-                    text-base md:text-lg leading-relaxed
+                    text-xs sm:text-sm md:text-base lg:text-lg leading-relaxed
                     ${themeStyles.text} opacity-95
                   `}
                 >
@@ -201,14 +201,14 @@ export default function InfographicPreview({
             ))}
           </div>
 
-          {/* CTA / Branding */}
-          <div className="mt-auto pt-6">
+          {/* CTA / Branding - responsive sizing */}
+          <div className="mt-auto pt-3 sm:pt-4 md:pt-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {/* Logo mark */}
-                <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Logo mark - responsive */}
+                <div className="w-4 sm:w-5 md:w-6 h-4 sm:h-5 md:h-6 rounded sm:rounded-lg bg-white/20 flex items-center justify-center">
                   <svg
-                    className="w-3.5 h-3.5 text-white"
+                    className="w-2.5 sm:w-3 md:w-3.5 h-2.5 sm:h-3 md:h-3.5 text-white"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -222,16 +222,16 @@ export default function InfographicPreview({
                   </svg>
                 </div>
                 <span
-                  className={`text-sm font-medium ${themeStyles.cta}`}
+                  className={`text-[10px] sm:text-xs md:text-sm font-medium ${themeStyles.cta}`}
                 >
                   Created with Blog2Visuals
                 </span>
               </div>
               
-              {/* Decorative arrow */}
-              <div className={`${themeStyles.text} opacity-50`}>
+              {/* Decorative arrow - hide on very small screens */}
+              <div className={`${themeStyles.text} opacity-50 hidden sm:block`}>
                 <svg
-                  className="w-5 h-5"
+                  className="w-4 md:w-5 h-4 md:h-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"

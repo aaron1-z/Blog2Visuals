@@ -538,6 +538,61 @@ export default function Home() {
       setTimeout(() => setCopiedField(null), 2000);
     } catch (err) {
       console.error("Failed to copy:", err);
+      setError("Failed to copy to clipboard. Please try selecting and copying manually.");
+    }
+  };
+
+  // Social sharing functions
+  const shareToTwitter = (caption: string) => {
+    const encodedText = encodeURIComponent(caption);
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodedText}`;
+    window.open(twitterUrl, "_blank", "width=600,height=400,scrollbars=yes");
+  };
+
+  const shareToLinkedIn = (caption: string) => {
+    const encodedText = encodeURIComponent(caption);
+    // LinkedIn share URL (simplified - they'll add their own compose UI)
+    const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}&summary=${encodedText}`;
+    window.open(linkedInUrl, "_blank", "width=600,height=600,scrollbars=yes");
+  };
+
+  const shareGeneric = async (platform: string) => {
+    // Try Web Share API first (works on mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Check out this infographic!",
+          text: twitterCaption || summary,
+          url: window.location.href,
+        });
+        return;
+      } catch (err) {
+        // User cancelled or not supported, fall through to platform-specific
+      }
+    }
+
+    // Fallback to platform-specific sharing
+    const text = twitterCaption || summary;
+    switch (platform) {
+      case "Twitter":
+        shareToTwitter(text);
+        break;
+      case "LinkedIn":
+        shareToLinkedIn(linkedinCaption || text);
+        break;
+      case "Instagram":
+        // Instagram doesn't have a web share API - guide user
+        handleCopyToClipboard(twitterCaption || summary, "instagram");
+        setPaymentSuccess(true);
+        setPaymentMessage("Caption copied! Open Instagram and paste when posting.");
+        setTimeout(() => { setPaymentSuccess(false); setPaymentMessage(""); }, 4000);
+        break;
+      case "Pinterest":
+        const pinterestUrl = `https://pinterest.com/pin/create/button/?description=${encodeURIComponent(text)}`;
+        window.open(pinterestUrl, "_blank", "width=600,height=600,scrollbars=yes");
+        break;
+      default:
+        handleCopyToClipboard(text, platform.toLowerCase());
     }
   };
 
@@ -697,13 +752,25 @@ export default function Home() {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
           <div className="flex items-center gap-3 px-6 py-4 bg-emerald-500 text-white rounded-xl shadow-2xl shadow-emerald-500/25">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+              {paymentMessage.includes("downloaded") || paymentMessage.includes("Downloaded") ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              ) : paymentMessage.includes("copied") || paymentMessage.includes("Copied") ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </div>
             <div>
-              <p className="font-semibold">Payment successful — Credits added!</p>
-              <p className="text-sm text-emerald-100">You now have {totalAllowedDownloads} downloads available</p>
+              <p className="font-semibold">{paymentMessage || "Success!"}</p>
+              {paymentMessage.includes("Credits") && (
+                <p className="text-sm text-emerald-100">You now have {totalAllowedDownloads} downloads available</p>
+              )}
             </div>
             <button 
               onClick={() => { setPaymentSuccess(false); setPaymentMessage(""); }}
@@ -1306,30 +1373,41 @@ export default function Home() {
                               <span className="text-sm font-medium text-stone-300">Twitter / X</span>
                               <span className="text-xs text-stone-500">({twitterCaption.length}/280)</span>
                             </div>
-                            <button
-                              onClick={() => handleCopyToClipboard(twitterCaption, "twitter")}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${
-                                copiedField === "twitter"
-                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                  : "bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 border border-transparent"
-                              }`}
-                            >
-                              {copiedField === "twitter" ? (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                  </svg>
-                                  Copy
-                                </>
-                              )}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => shareToTwitter(twitterCaption)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/30"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                Post
+                              </button>
+                              <button
+                                onClick={() => handleCopyToClipboard(twitterCaption, "twitter")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                                  copiedField === "twitter"
+                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                    : "bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 border border-transparent"
+                                }`}
+                              >
+                                {copiedField === "twitter" ? (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Copied!
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Copy
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
                           <p className="text-stone-300 text-sm leading-relaxed whitespace-pre-wrap">
                             {twitterCaption}
@@ -1345,30 +1423,41 @@ export default function Home() {
                               <span className="text-lg font-bold text-blue-500">in</span>
                               <span className="text-sm font-medium text-stone-300">LinkedIn</span>
                             </div>
-                            <button
-                              onClick={() => handleCopyToClipboard(linkedinCaption, "linkedin")}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${
-                                copiedField === "linkedin"
-                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                  : "bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 border border-transparent"
-                              }`}
-                            >
-                              {copiedField === "linkedin" ? (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                  </svg>
-                                  Copy
-                                </>
-                              )}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => shareToLinkedIn(linkedinCaption)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                Post
+                              </button>
+                              <button
+                                onClick={() => handleCopyToClipboard(linkedinCaption, "linkedin")}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                                  copiedField === "linkedin"
+                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                    : "bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 border border-transparent"
+                                }`}
+                              >
+                                {copiedField === "linkedin" ? (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Copied!
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Copy
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
                           <p className="text-stone-300 text-sm leading-relaxed whitespace-pre-wrap">
                             {linkedinCaption}
@@ -1379,19 +1468,20 @@ export default function Home() {
         </div>
                 )}
 
-                {/* Format options */}
+                {/* Share to social platforms */}
                 <div className="mt-6 pt-6 border-t border-stone-800">
-                  <p className="text-sm text-stone-400 mb-3">Export for:</p>
+                  <p className="text-sm text-stone-400 mb-3">Share to:</p>
                   <div className="flex flex-wrap gap-2">
                     {[
-                      { name: 'Twitter', icon: '𝕏' },
-                      { name: 'LinkedIn', icon: 'in' },
-                      { name: 'Instagram', icon: '📷' },
-                      { name: 'Pinterest', icon: '📌' },
+                      { name: 'Twitter', icon: '𝕏', color: 'hover:bg-sky-500/20 hover:border-sky-500/30 hover:text-sky-400' },
+                      { name: 'LinkedIn', icon: 'in', color: 'hover:bg-blue-500/20 hover:border-blue-500/30 hover:text-blue-400' },
+                      { name: 'Instagram', icon: '📷', color: 'hover:bg-pink-500/20 hover:border-pink-500/30 hover:text-pink-400' },
+                      { name: 'Pinterest', icon: '📌', color: 'hover:bg-red-500/20 hover:border-red-500/30 hover:text-red-400' },
                     ].map((platform) => (
                       <button
                         key={platform.name}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-sm text-stone-300 hover:text-white transition-all"
+                        onClick={() => shareGeneric(platform.name)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-stone-300 transition-all ${platform.color}`}
                       >
                         <span>{platform.icon}</span>
                         <span>{platform.name}</span>
