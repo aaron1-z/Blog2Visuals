@@ -1417,7 +1417,7 @@ export default function Home() {
                         period: "forever",
                         features: ["1 free export", "All themes", "AI summarization", "Social captions"],
                         cta: "Get Started",
-                        ctaLink: "#",
+                        ctaLink: "/signup",
                         popular: false,
                       },
                       {
@@ -1426,7 +1426,7 @@ export default function Home() {
                         period: "one-time",
                         features: ["10 export credits", "All themes", "AI summarization", "Priority support"],
                         cta: "Buy Now",
-                        ctaLink: "#",
+                        ctaLink: "/login",
                         popular: true,
                         onClick: handlePayment,
                       },
