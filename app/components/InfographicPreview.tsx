@@ -414,7 +414,6 @@ export default function InfographicPreview({
                 </div>
                 <span
                   className={`text-[1.7cqw] font-medium ${themeStyles.cta}`}
-                  style={{ minFontSize: '10px' }}
                 >
                   Created with Blog2Visuals
                 </span>
