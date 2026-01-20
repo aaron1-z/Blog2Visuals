@@ -52,6 +52,7 @@ export default function PricingPage() {
   const router = useRouter();
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string>(""); // user chooses
 
   // Load Razorpay script
   useEffect(() => {
@@ -291,73 +292,139 @@ export default function PricingPage() {
             {plans.map((plan, index) => (
               <div
                 key={index}
-                className={`relative p-6 lg:p-8 rounded-2xl border backdrop-blur-sm transition-all duration-300 ${
-                  plan.popular
-                    ? "bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/30 scale-105"
-                    : "bg-[#1c1917]/80 border-stone-800 hover:border-stone-700"
-                }`}
+                className="group perspective-1000"
+                onMouseMove={(e) => {
+                  const card = e.currentTarget.querySelector('.pricing-card') as HTMLElement;
+                  if (!card) return;
+                  const rect = card.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  const centerX = rect.width / 2;
+                  const centerY = rect.height / 2;
+                  const rotateX = (y - centerY) / 20;
+                  const rotateY = (centerX - x) / 20;
+                  card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
+                }}
+                onMouseLeave={(e) => {
+                  const card = e.currentTarget.querySelector('.pricing-card') as HTMLElement;
+                  if (card) {
+                    card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) scale(1)';
+                  }
+                }}
               >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-bold rounded-full shadow-lg">
-                    MOST POPULAR
-                  </div>
-                )}
-
-                <div className="mb-6">
-                  <h3 className="text-xl font-semibold text-white mb-2" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
-                    {plan.name}
-                  </h3>
-                  <p className="text-stone-400 text-sm">{plan.description}</p>
-                </div>
-
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-white">{plan.price}</span>
-                  <span className="text-stone-500 ml-2">/{plan.period}</span>
-                </div>
-
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-center gap-3 text-stone-300">
-                      <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div
+                  className={`pricing-card relative p-6 lg:p-8 rounded-2xl border backdrop-blur-sm transition-all duration-300 ${
+                    plan.popular
+                      ? "bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/30"
+                      : "bg-[#1c1917]/80 border-stone-800 hover:border-stone-700"
+                  } ${
+                    selectedPlan === plan.name
+                      ? "ring-2 ring-orange-500/40 shadow-2xl shadow-orange-500/10"
+                      : ""
+                  }`}
+                  onClick={(e) => {
+                    // Only select the plan if clicking outside of buttons/links
+                    const target = e.target as HTMLElement;
+                    if (!target.closest('button') && !target.closest('a')) {
+                      setSelectedPlan(plan.name);
+                    }
+                  }}
+                >
+                  {plan.popular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-bold rounded-full shadow-lg">
+                      MOST POPULAR
+                    </div>
+                  )}
+                  {selectedPlan === plan.name && (
+                    <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
-                      <span className="text-sm">{feature}</span>
-                    </li>
-                  ))}
-                  {plan.limitations.map((limitation, i) => (
-                    <li key={i} className="flex items-center gap-3 text-stone-500">
-                      <svg className="w-5 h-5 text-stone-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                      <span className="text-sm">{limitation}</span>
-                    </li>
-                  ))}
-                </ul>
+                    </div>
+                  )}
 
-                {plan.name === "Pro Pack" && isAuthenticated ? (
-                  <button
-                    onClick={handlePayment}
-                    disabled={isProcessingPayment}
-                    className={`w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 ${
-                      plan.popular
-                        ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                        : "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white"
-                    }`}
-                  >
-                    {isProcessingPayment ? "Processing..." : plan.cta}
-                  </button>
-                ) : (
-                  <Link
-                    href={plan.name === "Pro Pack" && !isAuthenticated ? "/login" : plan.ctaLink}
-                    className={`w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 ${
-                      plan.popular
-                        ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
-                        : "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white"
-                    }`}
-                  >
-                    {plan.cta}
-                  </Link>
-                )}
+                  <div className="mb-6">
+                    <h3 className="text-xl font-semibold text-white mb-2" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
+                      {plan.name}
+                    </h3>
+                    <p className="text-stone-400 text-sm">{plan.description}</p>
+                  </div>
+
+                  <div className="mb-6">
+                    <span className="text-4xl font-bold text-white">{plan.price}</span>
+                    <span className="text-stone-500 ml-2">/{plan.period}</span>
+                  </div>
+
+                  <ul className="space-y-3 mb-8">
+                    {plan.features.map((feature, i) => (
+                      <li key={i} className="flex items-center gap-3 text-stone-300">
+                        <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-sm">{feature}</span>
+                      </li>
+                    ))}
+                    {plan.limitations.map((limitation, i) => (
+                      <li key={i} className="flex items-center gap-3 text-stone-500">
+                        <svg className="w-5 h-5 text-stone-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span className="text-sm">{limitation}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* CTA Buttons - completely separate from card selection */}
+                  {plan.name === "Free" ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.location.href = "/signup";
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white cursor-pointer"
+                    >
+                      {plan.cta}
+                    </button>
+                  ) : plan.name === "Pro Pack" ? (
+                    isAuthenticated ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePayment();
+                        }}
+                        disabled={isProcessingPayment}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isProcessingPayment ? "Processing..." : plan.cta}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.location.href = "/login";
+                        }}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 cursor-pointer"
+                      >
+                        {plan.cta}
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.location.href = plan.ctaLink;
+                      }}
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white cursor-pointer"
+                    >
+                      {plan.cta}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -438,7 +505,7 @@ export default function PricingPage() {
               Try Blog2Visuals with 1 free export. No credit card required.
             </p>
             <Link
-              href="/"
+              href="/signup"
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -70,7 +70,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Get initial session
     const initializeAuth = async () => {
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+
+        // Fix: stale refresh token in localStorage can throw "Invalid Refresh Token"
+        // This commonly happens after changing Supabase projects/keys or clearing DB auth state.
+        if (error) {
+          const msg = (error as any)?.message || String(error);
+          if (msg.toLowerCase().includes("invalid refresh token") || msg.toLowerCase().includes("refresh token not found")) {
+            // Best effort cleanup: remove any stored supabase auth tokens
+            if (typeof window !== "undefined") {
+              try {
+                const keysToRemove: string[] = [];
+                for (let i = 0; i < window.localStorage.length; i++) {
+                  const k = window.localStorage.key(i);
+                  if (!k) continue;
+                  // Supabase-js stores tokens as sb-<projectRef>-auth-token
+                  if (/^sb-.*-auth-token$/.test(k)) keysToRemove.push(k);
+                }
+                keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+              } catch {
+                // ignore
+              }
+            }
+
+            // Also sign out to clear in-memory state
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setIsLoading(false);
+            return;
+          }
+        }
         
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
@@ -84,6 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       } catch (error) {
         console.error("Error initializing auth:", error);
+        setIsLoading(false);
       } finally {
         setIsLoading(false);
       }
