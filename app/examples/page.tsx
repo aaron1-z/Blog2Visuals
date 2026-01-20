@@ -118,26 +118,24 @@ export default function ExamplesPage() {
                 key={index}
                 className="group"
               >
-                <div className="rounded-2xl overflow-hidden border border-stone-800 hover:border-stone-700 transition-all duration-300 bg-[#1c1917]/50">
-                  {/* Infographic Preview - Scaled down */}
-                  <div className="transform scale-[0.5] origin-top-left w-[200%] h-0 pb-[100%] relative">
-                    <div className="absolute inset-0">
-                      <InfographicPreview 
-                        summary={example.summary} 
-                        theme={example.theme}
-                        title={example.title}
-                      />
-                    </div>
+                <div className="rounded-2xl overflow-hidden border border-stone-800 hover:border-stone-700 hover:border-orange-500/30 transition-all duration-300 bg-[#1c1917]/50 hover:shadow-xl hover:shadow-orange-500/5">
+                  {/* Infographic Preview - Using aspect-ratio container */}
+                  <div className="aspect-square p-3">
+                    <InfographicPreview 
+                      summary={example.summary} 
+                      theme={example.theme}
+                      title={example.title}
+                    />
                   </div>
                 </div>
                 
                 {/* Info */}
                 <div className="mt-4 px-2">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-white" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
+                    <h3 className="font-semibold text-white group-hover:text-orange-400 transition-colors" style={{ fontFamily: 'var(--font-syne), sans-serif' }}>
                       {example.title}
                     </h3>
-                    <span className="text-xs text-stone-500 bg-stone-800 px-2 py-1 rounded-full">
+                    <span className="text-xs text-stone-500 bg-stone-800 px-2.5 py-1 rounded-full capitalize">
                       {example.theme}
                     </span>
                   </div>

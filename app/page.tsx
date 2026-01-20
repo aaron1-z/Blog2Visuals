@@ -662,20 +662,23 @@ export default function Home() {
         creditDeducted = true; // Mark as used for local tracking
       }
 
-      // Step 2: Get the actual infographic element
-      const element = infographicRef.current.querySelector(".aspect-square") as HTMLElement;
+      // Step 2: Get the export-ready infographic element (hidden 1080x1080 version)
+      const exportContainer = infographicRef.current;
+      const element = exportContainer.querySelector(".infographic-export") as HTMLElement;
       if (!element) {
-        throw new Error("Infographic element not found");
+        throw new Error("Export element not found");
       }
 
-      // Step 3: Optimize PNG generation with timeout (increased to 45s for slower connections)
+      // Step 3: Generate PNG at 1080x1080 with high quality
       const exportPromise = toPng(element, {
-        quality: 0.95,
-        pixelRatio: 2,
+        quality: 1.0,
+        pixelRatio: 1, // Already at 1080x1080, no need to scale
         cacheBust: true,
-        backgroundColor: "#0c0a09",
-        filter: (node) => {
-          return !(node as HTMLElement).classList?.contains("no-export");
+        width: 1080,
+        height: 1080,
+        style: {
+          transform: 'none',
+          transformOrigin: 'top left',
         },
       });
 
@@ -1213,9 +1216,19 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Infographic Preview */}
-                <div ref={infographicRef} id="infographic-container" className="mb-6">
+                {/* Infographic Preview - Display Version */}
+                <div id="infographic-display" className="mb-6">
                   <InfographicPreview summary={summary} theme={selectedTheme} />
+                </div>
+
+                {/* Hidden Export Version - Fixed 1080x1080 */}
+                <div 
+                  ref={infographicRef} 
+                  id="infographic-export" 
+                  className="fixed -left-[9999px] top-0 pointer-events-none"
+                  style={{ width: 1080, height: 1080 }}
+                >
+                  <InfographicPreview summary={summary} theme={selectedTheme} forExport={true} />
                 </div>
 
                 {/* Size info */}
@@ -1336,7 +1349,16 @@ export default function Home() {
                       </>
                     )}
                   </button>
-                  <button className="flex items-center justify-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all duration-300">
+                  <button 
+                    onClick={() => {
+                      // Scroll to social captions section
+                      const socialSection = document.getElementById('social-captions');
+                      if (socialSection) {
+                        socialSection.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all duration-300"
+                  >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
@@ -1347,7 +1369,7 @@ export default function Home() {
                     className="flex items-center justify-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all duration-300"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                     New
                   </button>
@@ -1355,7 +1377,7 @@ export default function Home() {
 
                 {/* Social Captions */}
                 {(twitterCaption || linkedinCaption) && (
-                  <div className="mt-6 pt-6 border-t border-stone-800">
+                  <div id="social-captions" className="mt-6 pt-6 border-t border-stone-800 scroll-mt-8">
                     <div className="flex items-center gap-2 mb-4">
                       <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
