@@ -6,6 +6,7 @@ import Link from "next/link";
 import InfographicPreview from "./components/InfographicPreview";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { detectCurrency, getPriceConfig, toggleCurrency, type Currency, type PriceConfig } from "@/lib/currency";
 
 // Declare Razorpay type for TypeScript
 declare global {
@@ -53,7 +54,6 @@ type Theme = "sunset" | "ocean" | "forest" | "purple" | "midnight";
 
 const FREE_DOWNLOAD_LIMIT = 1;
 const PRO_DOWNLOAD_CREDITS = 10;
-const PRO_PRICE_INR = 199;
 const STORAGE_KEY = "blog2visuals_downloads";
 const CREDITS_KEY = "blog2visuals_credits";
 
@@ -74,6 +74,8 @@ export default function Home() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
+  const [currency, setCurrency] = useState<Currency>("INR");
+  const [priceConfig, setPriceConfig] = useState<PriceConfig>(getPriceConfig("INR"));
   const infographicRef = useRef<HTMLDivElement>(null);
   const blogUrlInputRef = useRef<HTMLInputElement>(null);
   const trySectionRef = useRef<HTMLDivElement>(null);
@@ -108,6 +110,13 @@ export default function Home() {
     }
   }, []);
 
+  // Detect currency on mount
+  useEffect(() => {
+    const detectedCurrency = detectCurrency();
+    setCurrency(detectedCurrency);
+    setPriceConfig(getPriceConfig(detectedCurrency));
+  }, []);
+
   // Deep-link support: /?try=1#try scrolls to input and focuses it
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -131,6 +140,13 @@ export default function Home() {
   const totalAllowedDownloads = FREE_DOWNLOAD_LIMIT + paidCredits;
   const hasReachedLimit = downloadCount >= totalAllowedDownloads;
   const remainingDownloads = Math.max(0, totalAllowedDownloads - downloadCount);
+
+  // Handle currency toggle
+  const handleCurrencyToggle = () => {
+    const newCurrency = toggleCurrency(currency);
+    setCurrency(newCurrency);
+    setPriceConfig(getPriceConfig(newCurrency));
+  };
 
   // Helper function to get auth headers for secure API calls
   const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
@@ -176,7 +192,11 @@ export default function Home() {
           const response = await fetch("/api/create-order", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: user?.id || null }),
+            body: JSON.stringify({ 
+              user_id: user?.id || null,
+              currency: currency, // Pass detected currency
+              product: "proPack",
+            }),
             signal: controller.signal,
           });
           clearTimeout(timeoutId);
@@ -221,9 +241,9 @@ export default function Home() {
       const options: RazorpayOptions = {
         key: orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY || "",
         amount: orderData.amount,
-        currency: orderData.currency || "INR",
+        currency: orderData.currency || currency,
         name: "Blog2Visuals",
-        description: `Pro Pack - ${PRO_DOWNLOAD_CREDITS} Exports`,
+        description: `Pro Pack - 10 Exports (${priceConfig.proPackDisplay})`,
         order_id: orderData.order_id,
         handler: async function (response: RazorpayResponse) {
           // Razorpay modal closes automatically after this handler runs
@@ -527,36 +547,56 @@ export default function Home() {
     setIsExporting(true);
     setError(null);
 
+    // Track if credit was already deducted (to avoid double deduction on retry)
+    let creditDeducted = false;
+
     try {
       // Step 1: Deduct credit FIRST (before export) - strict enforcement
       if (user?.id) {
         const authHeaders = await getAuthHeaders();
         
-        const deductResponse = await fetch("/api/deduct-credit", {
-          method: "POST",
-          headers: authHeaders,
-          body: JSON.stringify({ user_id: user.id }),
-        });
+        // Add timeout for credit deduction API
+        const deductController = new AbortController();
+        const deductTimeout = setTimeout(() => deductController.abort(), 15000);
+        
+        try {
+          const deductResponse = await fetch("/api/deduct-credit", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ user_id: user.id }),
+            signal: deductController.signal,
+          });
+          clearTimeout(deductTimeout);
 
-        const deductData = await deductResponse.json();
+          const deductData = await deductResponse.json();
 
-        if (!deductResponse.ok || !deductData.success) {
-          if (deductResponse.status === 401 || deductResponse.status === 403) {
-            setError("Session expired. Please login again.");
-            setIsExporting(false);
-            return;
+          if (!deductResponse.ok || !deductData.success) {
+            if (deductResponse.status === 401 || deductResponse.status === 403) {
+              setError("Session expired. Please login again.");
+              setIsExporting(false);
+              return;
+            }
+            if (deductData.error === "Insufficient credits") {
+              setError("No credits remaining. Please purchase more credits.");
+              setIsExporting(false);
+              return;
+            }
+            throw new Error(deductData.error || "Failed to deduct credit");
           }
-          if (deductData.error === "Insufficient credits") {
-            setError("No credits remaining. Please purchase more credits.");
-            setIsExporting(false);
-            return;
+
+          // Mark credit as deducted
+          creditDeducted = true;
+
+          // Update UI immediately
+          setPaidCredits(deductData.credits);
+          localStorage.setItem(CREDITS_KEY, deductData.credits.toString());
+        } catch (deductErr) {
+          clearTimeout(deductTimeout);
+          if (deductErr instanceof Error && deductErr.name === "AbortError") {
+            throw new Error("Credit verification timed out. Please check your connection and try again.");
           }
-          throw new Error(deductData.error || "Failed to deduct credit");
+          throw deductErr;
         }
-
-        // Update UI immediately
-        setPaidCredits(deductData.credits);
-        localStorage.setItem(CREDITS_KEY, deductData.credits.toString());
       } else {
         // For non-authenticated users, check localStorage limit
         if (downloadCount >= FREE_DOWNLOAD_LIMIT) {
@@ -564,6 +604,7 @@ export default function Home() {
           setIsExporting(false);
           return;
         }
+        creditDeducted = true; // Mark as used for local tracking
       }
 
       // Step 2: Get the actual infographic element
@@ -572,21 +613,20 @@ export default function Home() {
         throw new Error("Infographic element not found");
       }
 
-      // Step 3: Optimize PNG generation with timeout
+      // Step 3: Optimize PNG generation with timeout (increased to 45s for slower connections)
       const exportPromise = toPng(element, {
-        quality: 0.95, // Slightly lower quality for faster export
+        quality: 0.95,
         pixelRatio: 2,
         cacheBust: true,
-        backgroundColor: "#0c0a09", // Match background
+        backgroundColor: "#0c0a09",
         filter: (node) => {
-          // Filter out any elements that shouldn't be exported
           return !(node as HTMLElement).classList?.contains("no-export");
         },
       });
 
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging (increased to 45 seconds)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Export timed out. Please try again.")), 30000);
+        setTimeout(() => reject(new Error("Export timed out")), 45000);
       });
 
       const dataUrl = await Promise.race([exportPromise, timeoutPromise]);
@@ -600,17 +640,36 @@ export default function Home() {
       document.body.removeChild(link);
 
       // Step 5: Update local tracking (only for non-authenticated users)
-      if (!user?.id) {
+      if (!user?.id && creditDeducted) {
         const newCount = downloadCount + 1;
         setDownloadCount(newCount);
         localStorage.setItem(STORAGE_KEY, newCount.toString());
       }
+
+      // Show success toast briefly
+      setPaymentSuccess(true);
+      setPaymentMessage("Infographic downloaded successfully!");
+      setTimeout(() => {
+        setPaymentSuccess(false);
+        setPaymentMessage("");
+      }, 3000);
+
     } catch (err) {
       console.error("Error exporting image:", err);
-      if (err instanceof Error && err.message.includes("timed out")) {
-        setError("Export is taking too long. Please try again or refresh the page.");
+      
+      // Better error messages
+      if (err instanceof Error) {
+        if (err.message.includes("timed out")) {
+          setError("Export is taking too long. Please try again or use a faster connection.");
+        } else if (err.message.includes("credit")) {
+          setError(err.message);
+        } else if (err.message.includes("network") || err.message.includes("fetch")) {
+          setError("Network error. Please check your connection and try again.");
+        } else {
+          setError("Failed to export image. Please try again.");
+        }
       } else {
-        setError(err instanceof Error ? err.message : "Failed to export image. Please try again.");
+        setError("An unexpected error occurred. Please refresh and try again.");
       }
     } finally {
       setIsExporting(false);
@@ -1146,7 +1205,7 @@ export default function Home() {
                       <div className="flex-1">
                         <h4 className="text-white font-semibold mb-1">Free limit reached</h4>
                         <p className="text-stone-400 text-sm mb-3">
-                          You've used your free download. Get {PRO_DOWNLOAD_CREDITS} more exports for just ₹{PRO_PRICE_INR}.
+                          You've used your free download. Get {PRO_DOWNLOAD_CREDITS} more exports for just {priceConfig.proPackDisplay}.
                         </p>
                         <button 
                           onClick={handlePayment}
@@ -1166,7 +1225,7 @@ export default function Home() {
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                               </svg>
-                              Buy {PRO_DOWNLOAD_CREDITS} Exports - ₹{PRO_PRICE_INR}
+                              Buy {PRO_DOWNLOAD_CREDITS} Exports - {priceConfig.proPackDisplay}
                             </>
                           )}
                         </button>
@@ -1408,12 +1467,26 @@ export default function Home() {
                       Simple Pricing
                     </h2>
                     <p className="text-stone-400 text-lg">Choose the plan that works for you</p>
+                    
+                    {/* Currency Toggle */}
+                    <button
+                      onClick={handleCurrencyToggle}
+                      className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-stone-800/50 border border-stone-700 text-stone-300 hover:text-white hover:border-stone-600 transition-all text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {currency === "INR" ? "🇮🇳 INR" : "🇺🇸 USD"}
+                      <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                      </svg>
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
                     {[
                       {
                         name: "Free",
-                        price: "₹0",
+                        price: `${priceConfig.symbol}0`,
                         period: "forever",
                         features: ["1 free export", "All themes", "AI summarization", "Social captions"],
                         cta: "Get Started",
@@ -1422,7 +1495,7 @@ export default function Home() {
                       },
                       {
                         name: "Pro Pack",
-                        price: "₹199",
+                        price: priceConfig.proPackDisplay,
                         period: "one-time",
                         features: ["10 export credits", "All themes", "AI summarization", "Priority support"],
                         cta: "Buy Now",
@@ -1432,7 +1505,7 @@ export default function Home() {
                       },
                       {
                         name: "Business",
-                        price: "₹999",
+                        price: priceConfig.businessDisplay,
                         period: "one-time",
                         features: ["50 export credits", "All themes", "Priority support", "Custom branding (soon)"],
                         cta: "Contact Sales",

@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { detectCurrency, getPriceConfig, toggleCurrency, type Currency, type PriceConfig } from "@/lib/currency";
 
 // Declare Razorpay types (matching app/page.tsx)
 interface RazorpayOptions {
@@ -53,6 +54,8 @@ export default function PricingPage() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<string>(""); // user chooses
+  const [currency, setCurrency] = useState<Currency>("INR");
+  const [priceConfig, setPriceConfig] = useState<PriceConfig>(getPriceConfig("INR"));
 
   // Load Razorpay script
   useEffect(() => {
@@ -66,6 +69,20 @@ export default function PricingPage() {
       }
     };
   }, []);
+
+  // Detect currency on mount
+  useEffect(() => {
+    const detectedCurrency = detectCurrency();
+    setCurrency(detectedCurrency);
+    setPriceConfig(getPriceConfig(detectedCurrency));
+  }, []);
+
+  // Handle currency toggle
+  const handleCurrencyToggle = () => {
+    const newCurrency = toggleCurrency(currency);
+    setCurrency(newCurrency);
+    setPriceConfig(getPriceConfig(newCurrency));
+  };
 
   const handlePayment = async () => {
     if (typeof window.Razorpay === "undefined") {
@@ -89,7 +106,11 @@ export default function PricingPage() {
       const orderResponse = await fetch("/api/create-order", {
         method: "POST",
         headers,
-        body: JSON.stringify({ user_id: user?.id || null }),
+        body: JSON.stringify({ 
+          user_id: user?.id || null,
+          currency: currency,
+          product: "proPack",
+        }),
       });
 
       const orderData = await orderResponse.json();
@@ -102,9 +123,9 @@ export default function PricingPage() {
       const options = {
         key: orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY || "",
         amount: orderData.amount,
-        currency: orderData.currency || "INR",
+        currency: orderData.currency || currency,
         name: "Blog2Visuals",
-        description: "Pro Pack - 10 Exports",
+        description: `Pro Pack - 10 Exports (${priceConfig.proPackDisplay})`,
         order_id: orderData.order_id,
         handler: async function (response: RazorpayResponse) {
           try {
@@ -169,7 +190,7 @@ export default function PricingPage() {
   const plans = [
     {
       name: "Free",
-      price: "₹0",
+      price: `${priceConfig.symbol}0`,
       period: "forever",
       description: "Perfect for trying out Blog2Visuals",
       features: [
@@ -186,7 +207,7 @@ export default function PricingPage() {
     },
     {
       name: "Pro Pack",
-      price: "₹199",
+      price: priceConfig.proPackDisplay,
       period: "one-time",
       description: "Best for content creators",
       features: [
@@ -204,7 +225,7 @@ export default function PricingPage() {
     },
     {
       name: "Business",
-      price: "₹999",
+      price: priceConfig.businessDisplay,
       period: "one-time",
       description: "For teams and agencies",
       features: [
@@ -281,9 +302,23 @@ export default function PricingPage() {
             </span>
           </h1>
           
-          <p className="text-lg text-stone-400 max-w-2xl mx-auto">
+          <p className="text-lg text-stone-400 max-w-2xl mx-auto mb-6">
             No subscriptions. No hidden fees. Just simple credit packs that never expire.
           </p>
+          
+          {/* Currency Toggle */}
+          <button
+            onClick={handleCurrencyToggle}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-stone-800/50 border border-stone-700 text-stone-300 hover:text-white hover:border-stone-600 transition-all"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {currency === "INR" ? "🇮🇳 INR" : "🇺🇸 USD"}
+            <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+            </svg>
+          </button>
         </section>
 
         {/* Pricing Cards */}

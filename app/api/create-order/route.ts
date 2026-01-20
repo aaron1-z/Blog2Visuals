@@ -10,6 +10,21 @@ function generateReceiptId(): string {
   return `rcpt_${crypto.randomBytes(8).toString("hex")}_${Date.now()}`;
 }
 
+// Pricing configuration for different currencies
+const PRICING = {
+  INR: {
+    proPack: 19900, // ₹199 in paise
+    business: 99900, // ₹999 in paise
+  },
+  USD: {
+    proPack: 299, // $2.99 in cents
+    business: 1299, // $12.99 in cents
+  },
+};
+
+type SupportedCurrency = "INR" | "USD";
+type ProductType = "proPack" | "business";
+
 export async function POST(request: NextRequest) {
   try {
     // Validate Razorpay credentials
@@ -27,24 +42,44 @@ export async function POST(request: NextRequest) {
       key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
 
-    // Parse request body (optional: can include user_id for tracking)
+    // Parse request body
     let userId: string | null = null;
+    let currency: SupportedCurrency = "INR";
+    let product: ProductType = "proPack";
+    
     try {
       const body = await request.json();
       userId = body.user_id || null;
+      
+      // Validate and set currency
+      if (body.currency === "USD" || body.currency === "INR") {
+        currency = body.currency;
+      }
+      
+      // Validate and set product type
+      if (body.product === "business") {
+        product = "business";
+      }
     } catch {
-      // Body is optional, continue without it
+      // Body is optional, continue with defaults
     }
+
+    // Get amount based on currency and product
+    const amount = PRICING[currency][product];
+    const credits = product === "proPack" ? "10" : "50";
+    const productName = product === "proPack" 
+      ? "Pro Pack - 10 Exports" 
+      : "Business Pack - 50 Exports";
 
     // Create Razorpay order with timeout
     const options = {
-      amount: 19900, // Amount in paise (₹199)
-      currency: "INR",
+      amount: amount,
+      currency: currency,
       receipt: generateReceiptId(),
       notes: {
-        credits: "10",
+        credits: credits,
         user_id: userId || "anonymous",
-        product: "Pro Pack - 10 Exports",
+        product: productName,
       },
     };
 

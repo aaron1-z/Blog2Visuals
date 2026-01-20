@@ -60,9 +60,31 @@ function extractBulletPoints(summary: string): string[] {
     if (point.endsWith(".")) {
       point = point.slice(0, -1);
     }
-    // Truncate if too long
-    if (point.length > 80) {
-      point = point.substring(0, 77) + "...";
+    // Truncate at word boundary if too long (increased limit to 120)
+    const maxLength = 120;
+    if (point.length > maxLength) {
+      // Find the last space before the limit
+      const lastSpace = point.lastIndexOf(" ", maxLength);
+      if (lastSpace > maxLength * 0.6) {
+        // Use word boundary if it's not too far back
+        point = point.substring(0, lastSpace) + "...";
+      } else {
+        // Fallback: try to end at a comma or other natural break
+        const breakChars = [",", ";", ":", "-"];
+        let bestBreak = -1;
+        for (const char of breakChars) {
+          const pos = point.lastIndexOf(char, maxLength);
+          if (pos > bestBreak && pos > maxLength * 0.5) {
+            bestBreak = pos;
+          }
+        }
+        if (bestBreak > 0) {
+          point = point.substring(0, bestBreak) + "...";
+        } else {
+          // Last resort: cut at word boundary
+          point = point.substring(0, maxLength - 3).trimEnd() + "...";
+        }
+      }
     }
     points.push(point);
   }
@@ -74,13 +96,22 @@ function extractTitle(summary: string): string {
   // Try to create a compelling title from the summary
   const firstSentence = summary.split(/[.!?]/)[0]?.trim() || "";
   
-  // If first sentence is short enough, use it
-  if (firstSentence.length <= 50) {
+  // If first sentence is short enough, use it (increased limit to 60)
+  if (firstSentence.length <= 60) {
     return firstSentence;
   }
   
-  // Otherwise, extract key words
-  const words = firstSentence.split(" ").slice(0, 6).join(" ");
+  // Try to cut at a natural word boundary
+  const maxLength = 55;
+  const truncated = firstSentence.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(" ");
+  
+  if (lastSpace > maxLength * 0.6) {
+    return truncated.substring(0, lastSpace) + "...";
+  }
+  
+  // Otherwise, extract key words (increased to 8 words)
+  const words = firstSentence.split(" ").slice(0, 8).join(" ");
   return words + "...";
 }
 

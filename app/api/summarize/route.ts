@@ -6,7 +6,7 @@ const HUGGINGFACE_API_URL =
   "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn";
 
 const TIMEOUT_MS = 60000; // 60 seconds timeout (model may need to warm up)
-const MAX_INPUT_LENGTH = 4000; // BART has token limits
+const MAX_INPUT_LENGTH = 5000; // Increased for better context (BART handles this well)
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,11 +56,13 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           inputs: truncatedContent,
           parameters: {
-            max_length: 200, // Increased for more complete summaries
-            min_length: 50, // Increased minimum length
+            max_length: 300, // Increased for more complete summaries
+            min_length: 80, // Ensure substantial output
             do_sample: false,
             num_beams: 4, // Better quality
             early_stopping: true,
+            no_repeat_ngram_size: 3, // Prevent repetition
+            length_penalty: 1.2, // Encourage slightly longer summaries
           },
         }),
         signal: controller.signal,
