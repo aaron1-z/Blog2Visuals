@@ -75,6 +75,8 @@ export default function Home() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
   const infographicRef = useRef<HTMLDivElement>(null);
+  const blogUrlInputRef = useRef<HTMLInputElement>(null);
+  const trySectionRef = useRef<HTMLDivElement>(null);
 
   // Load Razorpay script
   useEffect(() => {
@@ -104,6 +106,25 @@ export default function Home() {
         setPaidCredits(credits);
       }
     }
+  }, []);
+
+  // Deep-link support: /?try=1#try scrolls to input and focuses it
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const wantsTry = params.get("try") === "1";
+    const hasTryHash = window.location.hash === "#try";
+
+    if (!wantsTry && !hasTryHash) return;
+
+    // Wait a tick for layout
+    const t = window.setTimeout(() => {
+      trySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      blogUrlInputRef.current?.focus();
+    }, 50);
+
+    return () => window.clearTimeout(t);
   }, []);
 
   // Calculate limits based on free + paid credits
@@ -706,7 +727,7 @@ export default function Home() {
           </p>
 
           {/* Input Section */}
-          <div className="mt-12 max-w-2xl mx-auto animate-fade-up-delay-4">
+          <div id="try" ref={trySectionRef} className="mt-12 max-w-2xl mx-auto animate-fade-up-delay-4">
             <div className="relative group">
               {/* Glow effect */}
               <div className="absolute -inset-1 bg-gradient-to-r from-orange-500/50 via-amber-500/50 to-orange-500/50 rounded-2xl blur-lg opacity-0 group-hover:opacity-50 group-focus-within:opacity-75 transition-all duration-500" />
@@ -718,6 +739,7 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
                   <input
+                    ref={blogUrlInputRef}
                     type="url"
                     value={blogUrl}
                     onChange={(e) => setBlogUrl(e.target.value)}
