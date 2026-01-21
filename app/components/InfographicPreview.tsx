@@ -317,7 +317,7 @@ export default function InfographicPreview({
 
   // Display mode: Responsive sizing
   return (
-    <div className="w-full aspect-square max-w-[320px] sm:max-w-[400px] md:max-w-[480px] lg:max-w-[540px] mx-auto">
+    <div className="w-full aspect-square max-w-[320px] sm:max-w-[380px] md:max-w-[440px] lg:max-w-[500px] xl:max-w-[560px] mx-auto">
       {/* Main container - 1:1 ratio */}
       <div
         className={`
@@ -346,45 +346,53 @@ export default function InfographicPreview({
           />
         </div>
 
-        {/* Content - using percentage-based sizing for consistency */}
-        <div className="relative z-10 h-full flex flex-col p-[7%]">
+        {/* Content - responsive sizing with viewport-based units */}
+        <div className="relative z-10 h-full flex flex-col p-[6%] sm:p-[7%] md:p-[8%]">
           {/* Top decoration */}
-          <div className="flex items-center gap-[1%] mb-[4%]">
-            <div className={`w-[5%] h-[0.6%] rounded-full ${themeStyles.bullet}`} />
-            <div className={`w-[2%] h-[0.6%] rounded-full ${themeStyles.bullet} opacity-60`} />
-            <div className={`w-[1%] h-[0.6%] rounded-full ${themeStyles.bullet} opacity-40`} />
+          <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5 md:mb-6">
+            <div className={`w-12 sm:w-14 md:w-16 h-1 sm:h-1.5 md:h-2 rounded-full ${themeStyles.bullet}`} />
+            <div className={`w-5 sm:w-6 md:w-8 h-1 sm:h-1.5 md:h-2 rounded-full ${themeStyles.bullet} opacity-60`} />
+            <div className={`w-2.5 sm:w-3 md:w-4 h-1 sm:h-1.5 md:h-2 rounded-full ${themeStyles.bullet} opacity-40`} />
           </div>
 
-          {/* Title */}
+          {/* Title - responsive font size with minimums */}
           <h2
             className={`
-              text-[5.2cqw] font-extrabold leading-[1.15]
-              ${themeStyles.text} mb-[5%] tracking-tight
+              text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl
+              font-extrabold leading-tight
+              ${themeStyles.text} mb-4 sm:mb-5 md:mb-6 lg:mb-7 tracking-tight
             `}
-            style={{ fontFamily: "var(--font-syne), sans-serif" }}
+            style={{
+              fontFamily: "var(--font-syne), sans-serif",
+              minHeight: "2.5rem", // Ensure minimum height
+            }}
           >
             {displayTitle}
           </h2>
 
-          {/* Bullet points */}
-          <div className="flex-1 flex flex-col justify-center gap-[2.5%]">
+          {/* Bullet points - responsive sizing */}
+          <div className="flex-1 flex flex-col justify-center gap-3 sm:gap-4 md:gap-5">
             {bulletPoints.map((point, index) => (
               <div
                 key={index}
-                className="flex items-start gap-[2%]"
+                className="flex items-start gap-3 sm:gap-4"
               >
-                {/* Bullet */}
-                <div className="flex-shrink-0 mt-[1.5%]">
+                {/* Bullet - fixed size for consistency */}
+                <div className="flex-shrink-0 mt-1.5 sm:mt-2">
                   <div
-                    className={`w-[1.3cqw] h-[1.3cqw] min-w-[6px] min-h-[6px] rounded-full ${themeStyles.bullet}`}
+                    className={`w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 rounded-full ${themeStyles.bullet}`}
                   />
                 </div>
-                {/* Text */}
+                {/* Text - responsive with minimum font size */}
                 <p
                   className={`
-                    text-[2.6cqw] leading-[1.5]
+                    text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed
                     ${themeStyles.text} opacity-95
                   `}
+                  style={{
+                    fontWeight: 400,
+                    minHeight: "1.25rem", // Ensure minimum height
+                  }}
                 >
                   {point}
                 </p>
@@ -393,13 +401,13 @@ export default function InfographicPreview({
           </div>
 
           {/* Branding */}
-          <div className="mt-auto pt-[4%]">
+          <div className="mt-auto pt-4 sm:pt-5 md:pt-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-[1.5%]">
+              <div className="flex items-center gap-3 sm:gap-4">
                 {/* Logo mark */}
-                <div className="w-[4%] h-[4%] min-w-[20px] min-h-[20px] rounded-lg bg-white/20 flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
                   <svg
-                    className="w-[60%] h-[60%] text-white"
+                    className="w-4 h-4 sm:w-5 sm:h-5 text-white"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -413,16 +421,16 @@ export default function InfographicPreview({
                   </svg>
                 </div>
                 <span
-                  className={`text-[1.7cqw] font-medium ${themeStyles.cta}`}
+                  className={`text-xs sm:text-sm md:text-base font-medium ${themeStyles.cta} leading-none`}
                 >
                   Created with Blog2Visuals
                 </span>
               </div>
-              
+
               {/* Arrow */}
               <div className={`${themeStyles.text} opacity-50`}>
                 <svg
-                  className="w-[2.5cqw] h-[2.5cqw] min-w-[14px] min-h-[14px]"
+                  className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
