@@ -56,27 +56,27 @@ function extractBulletPoints(summary: string): string[] {
     .replace(/([.!?])\s+/g, "$1|")
     .split("|")
     .map((s) => s.trim())
-    .filter((s) => s.length > 10);
+    .filter((s) => s.length > 5); // Reduced minimum length
 
   // Take up to 4 key points, try to balance lengths
   const points: string[] = [];
   const maxPoints = Math.min(sentences.length, 4);
-  
+
   for (let i = 0; i < maxPoints; i++) {
     let point = sentences[i];
-    
+
     // Remove trailing period for cleaner look
     if (point.endsWith(".")) {
       point = point.slice(0, -1);
     }
-    
-    // Target length based on number of points (more points = shorter each)
-    const maxLength = maxPoints <= 2 ? 100 : maxPoints === 3 ? 85 : 70;
-    
+
+    // More generous length limits for better readability
+    const maxLength = maxPoints <= 2 ? 120 : maxPoints === 3 ? 100 : 85;
+
     if (point.length > maxLength) {
       // Find the last space before the limit
       const lastSpace = point.lastIndexOf(" ", maxLength);
-      if (lastSpace > maxLength * 0.6) {
+      if (lastSpace > maxLength * 0.7) {
         point = point.substring(0, lastSpace) + "...";
       } else {
         // Try to end at a comma or other natural break
@@ -84,14 +84,20 @@ function extractBulletPoints(summary: string): string[] {
         let bestBreak = -1;
         for (const char of breakChars) {
           const pos = point.lastIndexOf(char, maxLength);
-          if (pos > bestBreak && pos > maxLength * 0.5) {
+          if (pos > bestBreak && pos > maxLength * 0.6) {
             bestBreak = pos;
           }
         }
         if (bestBreak > 0) {
-          point = point.substring(0, bestBreak) + "...";
+          point = point.substring(0, bestBreak + 1); // Include the break character
         } else {
-          point = point.substring(0, maxLength - 3).trimEnd() + "...";
+          // Force break at word boundary if possible
+          const forcedBreak = point.lastIndexOf(" ", maxLength);
+          if (forcedBreak > 0) {
+            point = point.substring(0, forcedBreak) + "...";
+          } else {
+            point = point.substring(0, maxLength - 3) + "...";
+          }
         }
       }
     }
@@ -103,24 +109,34 @@ function extractBulletPoints(summary: string): string[] {
 
 function extractTitle(summary: string): string {
   const firstSentence = summary.split(/[.!?]/)[0]?.trim() || "";
-  
+
   // If first sentence is short enough, use it
-  if (firstSentence.length <= 50) {
+  if (firstSentence.length <= 60) {
     return firstSentence;
   }
-  
-  // Try to cut at a natural word boundary
-  const maxLength = 45;
+
+  // Try to cut at a natural word boundary with more generous limits
+  const maxLength = 55;
   const truncated = firstSentence.substring(0, maxLength);
   const lastSpace = truncated.lastIndexOf(" ");
-  
-  if (lastSpace > maxLength * 0.5) {
+
+  if (lastSpace > maxLength * 0.6) {
     return truncated.substring(0, lastSpace) + "...";
   }
-  
-  // Extract key words
-  const words = firstSentence.split(" ").slice(0, 6).join(" ");
-  return words + "...";
+
+  // Extract more key words if needed
+  const words = firstSentence.split(" ").slice(0, 8).join(" ");
+  if (words.length <= maxLength) {
+    return words;
+  }
+
+  // Final fallback - force break at space
+  const forceBreak = firstSentence.lastIndexOf(" ", maxLength);
+  if (forceBreak > 0) {
+    return firstSentence.substring(0, forceBreak) + "...";
+  }
+
+  return firstSentence.substring(0, maxLength - 3) + "...";
 }
 
 export default function InfographicPreview({
@@ -347,51 +363,55 @@ export default function InfographicPreview({
         </div>
 
         {/* Content - responsive sizing with viewport-based units */}
-        <div className="relative z-10 h-full flex flex-col p-[6%] sm:p-[7%] md:p-[8%]">
-          {/* Top decoration */}
-          <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5 md:mb-6">
-            <div className={`w-12 sm:w-14 md:w-16 h-1 sm:h-1.5 md:h-2 rounded-full ${themeStyles.bullet}`} />
-            <div className={`w-5 sm:w-6 md:w-8 h-1 sm:h-1.5 md:h-2 rounded-full ${themeStyles.bullet} opacity-60`} />
-            <div className={`w-2.5 sm:w-3 md:w-4 h-1 sm:h-1.5 md:h-2 rounded-full ${themeStyles.bullet} opacity-40`} />
+        <div className="relative z-10 h-full flex flex-col p-[5%] sm:p-[6%] md:p-[7%]">
+          {/* Top decoration - smaller spacing */}
+          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4 md:mb-5">
+            <div className={`w-8 sm:w-10 md:w-12 h-0.5 sm:h-1 rounded-full ${themeStyles.bullet}`} />
+            <div className={`w-4 sm:w-5 md:w-6 h-0.5 sm:h-1 rounded-full ${themeStyles.bullet} opacity-60`} />
+            <div className={`w-2 sm:w-2.5 md:w-3 h-0.5 sm:h-1 rounded-full ${themeStyles.bullet} opacity-40`} />
           </div>
 
-          {/* Title - responsive font size with minimums */}
-          <h2
-            className={`
-              text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl
-              font-extrabold leading-tight
-              ${themeStyles.text} mb-4 sm:mb-5 md:mb-6 lg:mb-7 tracking-tight
-            `}
-            style={{
-              fontFamily: "var(--font-syne), sans-serif",
-              minHeight: "2.5rem", // Ensure minimum height
-            }}
-          >
-            {displayTitle}
-          </h2>
+          {/* Title - responsive font size with better line height */}
+          <div className="mb-3 sm:mb-4 md:mb-5">
+            <h2
+              className={`
+                text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl
+                font-extrabold leading-tight
+                ${themeStyles.text} tracking-tight
+              `}
+              style={{
+                fontFamily: "var(--font-syne), sans-serif",
+                lineHeight: 1.1,
+              }}
+            >
+              {displayTitle}
+            </h2>
+          </div>
 
-          {/* Bullet points - responsive sizing */}
-          <div className="flex-1 flex flex-col justify-center gap-3 sm:gap-4 md:gap-5">
+          {/* Bullet points - improved layout with better spacing */}
+          <div className="flex-1 flex flex-col justify-start gap-2 sm:gap-3 md:gap-4" style={{ minHeight: 0 }}>
             {bulletPoints.map((point, index) => (
               <div
                 key={index}
-                className="flex items-start gap-3 sm:gap-4"
+                className="flex items-start gap-2 sm:gap-3"
               >
                 {/* Bullet - fixed size for consistency */}
-                <div className="flex-shrink-0 mt-1.5 sm:mt-2">
+                <div className="flex-shrink-0 mt-1 sm:mt-1.5">
                   <div
-                    className={`w-3 h-3 sm:w-3.5 sm:h-3.5 md:w-4 md:h-4 rounded-full ${themeStyles.bullet}`}
+                    className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${themeStyles.bullet}`}
                   />
                 </div>
-                {/* Text - responsive with minimum font size */}
+                {/* Text - responsive with better wrapping */}
                 <p
                   className={`
-                    text-sm sm:text-base md:text-lg lg:text-xl leading-relaxed
-                    ${themeStyles.text} opacity-95
+                    text-xs sm:text-sm md:text-base lg:text-lg leading-snug
+                    ${themeStyles.text} opacity-95 flex-1
                   `}
                   style={{
                     fontWeight: 400,
-                    minHeight: "1.25rem", // Ensure minimum height
+                    lineHeight: 1.4,
+                    wordBreak: 'break-word',
+                    hyphens: 'auto',
                   }}
                 >
                   {point}
@@ -400,14 +420,14 @@ export default function InfographicPreview({
             ))}
           </div>
 
-          {/* Branding */}
-          <div className="mt-auto pt-4 sm:pt-5 md:pt-6">
+          {/* Branding - reduced spacing */}
+          <div className="mt-auto pt-3 sm:pt-4 md:pt-5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3">
                 {/* Logo mark */}
-                <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-md bg-white/20 flex items-center justify-center flex-shrink-0">
                   <svg
-                    className="w-4 h-4 sm:w-5 sm:h-5 text-white"
+                    className="w-3 h-3 sm:w-4 sm:h-4 text-white"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -421,7 +441,7 @@ export default function InfographicPreview({
                   </svg>
                 </div>
                 <span
-                  className={`text-xs sm:text-sm md:text-base font-medium ${themeStyles.cta} leading-none`}
+                  className={`text-[10px] sm:text-xs md:text-sm font-medium ${themeStyles.cta} leading-none`}
                 >
                   Created with Blog2Visuals
                 </span>
@@ -430,7 +450,7 @@ export default function InfographicPreview({
               {/* Arrow */}
               <div className={`${themeStyles.text} opacity-50`}>
                 <svg
-                  className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7"
+                  className="w-4 h-4 sm:w-5 sm:h-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
