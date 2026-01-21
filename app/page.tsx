@@ -58,6 +58,7 @@ const STORAGE_KEY = "blog2visuals_downloads";
 const CREDITS_KEY = "blog2visuals_credits";
 const SESSION_LINK_KEY = "blog2visuals_session_link_processed";
 const SESSION_FIRST_GENERATION_KEY = "blog2visuals_session_first_generation";
+const POST_LOGIN_FREE_USED_KEY = "blog2visuals_post_login_free_used";
 
 export default function Home() {
   const { isAuthenticated, user } = useAuth();
@@ -80,6 +81,7 @@ export default function Home() {
   const [priceConfig, setPriceConfig] = useState<PriceConfig>(getPriceConfig("INR"));
   const [hasProcessedLink, setHasProcessedLink] = useState(false);
   const [hasGeneratedFirstInfographic, setHasGeneratedFirstInfographic] = useState(false);
+  const [hasUsedPostLoginFree, setHasUsedPostLoginFree] = useState(false);
   const infographicRef = useRef<HTMLDivElement>(null);
   const blogUrlInputRef = useRef<HTMLInputElement>(null);
   const trySectionRef = useRef<HTMLDivElement>(null);
@@ -125,9 +127,11 @@ export default function Home() {
   useEffect(() => {
     const linkProcessed = sessionStorage.getItem(SESSION_LINK_KEY) === "true";
     const firstGenerationDone = sessionStorage.getItem(SESSION_FIRST_GENERATION_KEY) === "true";
+    const postLoginFreeUsed = localStorage.getItem(POST_LOGIN_FREE_USED_KEY) === "true";
 
     setHasProcessedLink(linkProcessed);
     setHasGeneratedFirstInfographic(firstGenerationDone);
+    setHasUsedPostLoginFree(postLoginFreeUsed);
   }, []);
 
   // Deep-link support: /?try=1#try scrolls to input and focuses it
@@ -149,10 +153,23 @@ export default function Home() {
     return () => window.clearTimeout(t);
   }, []);
 
-  // Calculate limits based on free + paid credits
-  const totalAllowedDownloads = FREE_DOWNLOAD_LIMIT + paidCredits;
-  const hasReachedLimit = downloadCount >= totalAllowedDownloads;
-  const remainingDownloads = Math.max(0, totalAllowedDownloads - downloadCount);
+  // Calculate limits based on authentication status and credits
+  let totalAllowedDownloads: number;
+  let hasReachedLimit: boolean;
+  let remainingDownloads: number;
+
+  if (isAuthenticated) {
+    // Authenticated users: start with 1 free download after login, then must buy credits
+    const postLoginFreeAvailable = !hasUsedPostLoginFree;
+    totalAllowedDownloads = postLoginFreeAvailable ? 1 : paidCredits;
+    hasReachedLimit = downloadCount >= totalAllowedDownloads;
+    remainingDownloads = Math.max(0, totalAllowedDownloads - downloadCount);
+  } else {
+    // Non-authenticated users: use the old free limit system
+    totalAllowedDownloads = FREE_DOWNLOAD_LIMIT + paidCredits;
+    hasReachedLimit = downloadCount >= totalAllowedDownloads;
+    remainingDownloads = Math.max(0, totalAllowedDownloads - downloadCount);
+  }
 
   // Handle currency toggle
   const handleCurrencyToggle = () => {
@@ -527,6 +544,12 @@ export default function Home() {
   };
 
   const handleGenerateInfographic = async () => {
+    // Check if authenticated user has used their free download and has no credits
+    if (isAuthenticated && hasUsedPostLoginFree && paidCredits <= 0) {
+      window.location.href = "/#pricing";
+      return;
+    }
+
     setStep("generating");
     setTwitterCaption("");
     setLinkedinCaption("");
@@ -632,7 +655,14 @@ export default function Home() {
   };
 
   const handleDownloadPng = async () => {
-    if (!infographicRef.current || hasReachedLimit) return;
+    if (!infographicRef.current || hasReachedLimit) {
+      // If limit reached and user is authenticated, redirect to pricing
+      if (hasReachedLimit && isAuthenticated) {
+        window.location.href = "/#pricing";
+        return;
+      }
+      return;
+    }
 
     setIsExporting(true);
     setError(null);
@@ -688,13 +718,28 @@ export default function Home() {
           throw deductErr;
         }
       } else {
-        // For non-authenticated users, check localStorage limit
-        if (downloadCount >= FREE_DOWNLOAD_LIMIT) {
-          setError("Free limit reached. Please sign up to get more credits.");
-          setIsExporting(false);
-          return;
+        // For authenticated users: handle post-login free download
+        if (isAuthenticated) {
+          if (!hasUsedPostLoginFree) {
+            // Using their post-login free download
+            setHasUsedPostLoginFree(true);
+            localStorage.setItem(POST_LOGIN_FREE_USED_KEY, "true");
+            creditDeducted = true;
+          } else if (paidCredits <= 0) {
+            // No credits left, redirect to pricing
+            window.location.href = "/#pricing";
+            setIsExporting(false);
+            return;
+          }
+        } else {
+          // For non-authenticated users, check localStorage limit
+          if (downloadCount >= FREE_DOWNLOAD_LIMIT) {
+            setError("Free limit reached. Please sign up to get more credits.");
+            setIsExporting(false);
+            return;
+          }
+          creditDeducted = true; // Mark as used for local tracking
         }
-        creditDeducted = true; // Mark as used for local tracking
       }
 
       // Step 2: Get the export-ready infographic element (hidden 1080x1080 version)
@@ -1165,15 +1210,27 @@ export default function Home() {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={handleGenerateInfographic}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Generate Infographic
-                  </button>
+                  {(!isAuthenticated || !hasUsedPostLoginFree || paidCredits > 0) ? (
+                    <button
+                      onClick={handleGenerateInfographic}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Generate Infographic
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => window.location.href = "/#pricing"}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m5-5V8a2 2 0 012-2h1a2 2 0 012 2v5m0 0v5a2 2 0 01-2 2H9a2 2 0 01-2-2v-5z" />
+                      </svg>
+                      Buy Credits to Generate
+                    </button>
+                  )}
                   <button
                     onClick={handleReset}
                     className="flex items-center justify-center gap-2 px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-medium rounded-xl transition-all duration-300"
@@ -1306,7 +1363,12 @@ export default function Home() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>{remainingDownloads} free download{remainingDownloads !== 1 ? 's' : ''} remaining</span>
+                    <span>
+                      {isAuthenticated
+                        ? (hasUsedPostLoginFree ? `${paidCredits} credit${paidCredits !== 1 ? 's' : ''} remaining` : "1 free download remaining")
+                        : `${remainingDownloads} free download${remainingDownloads !== 1 ? 's' : ''} remaining`
+                      }
+                    </span>
                   </div>
                 )}
 
@@ -1347,32 +1409,48 @@ export default function Home() {
                         </svg>
                       </div>
                       <div className="flex-1">
-                        <h4 className="text-white font-semibold mb-1">Free limit reached</h4>
+                        <h4 className="text-white font-semibold mb-1">
+                          {isAuthenticated ? "Credits exhausted" : "Free limit reached"}
+                        </h4>
                         <p className="text-stone-400 text-sm mb-3">
-                          You've used your free download. Get {PRO_DOWNLOAD_CREDITS} more exports for just {priceConfig.proPackDisplay}.
+                          {isAuthenticated
+                            ? `You've used your free download. Get ${PRO_DOWNLOAD_CREDITS} more exports for just ${priceConfig.proPackDisplay}.`
+                            : `You've used your free download. Get ${PRO_DOWNLOAD_CREDITS} more exports for just ${priceConfig.proPackDisplay}.`
+                          }
                         </p>
-                        <button 
-                          onClick={handlePayment}
-                          disabled={isProcessingPayment}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 disabled:from-stone-600 disabled:to-stone-600 text-white text-sm font-semibold rounded-lg transition-all duration-300 shadow-lg shadow-orange-500/25 disabled:shadow-none disabled:cursor-wait"
-                        >
-                          {isProcessingPayment ? (
-                            <>
-                              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                              </svg>
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                              </svg>
-                              Buy {PRO_DOWNLOAD_CREDITS} Exports - {priceConfig.proPackDisplay}
-                            </>
-                          )}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => window.location.href = "/#pricing"}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white text-sm font-semibold rounded-lg transition-all duration-300 shadow-lg shadow-orange-500/25"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m5-5V8a2 2 0 012-2h1a2 2 0 012 2v5m0 0v5a2 2 0 01-2 2H9a2 2 0 01-2-2v-5z" />
+                            </svg>
+                            View Pricing
+                          </button>
+                          <button
+                            onClick={handlePayment}
+                            disabled={isProcessingPayment}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-semibold rounded-lg transition-all duration-300 border border-white/20"
+                          >
+                            {isProcessingPayment ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                </svg>
+                                Buy Now - {priceConfig.proPackDisplay}
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1380,7 +1458,7 @@ export default function Home() {
 
                 {/* Action buttons */}
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <button 
+                  <button
                     onClick={handleDownloadPng}
                     disabled={isExporting || hasReachedLimit}
                     className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 font-semibold rounded-xl transition-all duration-300 ${
