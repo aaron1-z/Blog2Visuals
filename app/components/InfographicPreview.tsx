@@ -56,51 +56,68 @@ function extractBulletPoints(summary: string): string[] {
     .replace(/([.!?])\s+/g, "$1|")
     .split("|")
     .map((s) => s.trim())
-    .filter((s) => s.length > 5); // Reduced minimum length
+    .filter((s) => s.length > 5);
 
-  // Take up to 4 key points, try to balance lengths
+  // Prioritize complete sentences - try to fit as many full sentences as possible
   const points: string[] = [];
-  const maxPoints = Math.min(sentences.length, 4);
+  const totalSentences = sentences.length;
 
-  for (let i = 0; i < maxPoints; i++) {
-    let point = sentences[i];
+  // If we have 4 or fewer sentences, use them all without truncation
+  if (totalSentences <= 4) {
+    for (let i = 0; i < totalSentences; i++) {
+      let point = sentences[i];
+      // Remove trailing period for cleaner look
+      if (point.endsWith(".")) {
+        point = point.slice(0, -1);
+      }
+      points.push(point);
+    }
+    return points;
+  }
+
+  // If we have more than 4 sentences, prioritize the first 4 most important ones
+  // and only truncate if they're extremely long
+  const selectedSentences = sentences.slice(0, 4);
+
+  for (let i = 0; i < selectedSentences.length; i++) {
+    let point = selectedSentences[i];
 
     // Remove trailing period for cleaner look
     if (point.endsWith(".")) {
       point = point.slice(0, -1);
     }
 
-    // More generous length limits for better readability
-    const maxLength = maxPoints <= 2 ? 120 : maxPoints === 3 ? 100 : 85;
+    // Very generous length limit - only truncate if absolutely necessary
+    const maxLength = 150; // Much more generous limit
 
+    // Only truncate if the sentence is extremely long
     if (point.length > maxLength) {
-      // Find the last space before the limit
-      const lastSpace = point.lastIndexOf(" ", maxLength);
-      if (lastSpace > maxLength * 0.7) {
-        point = point.substring(0, lastSpace) + "...";
-      } else {
-        // Try to end at a comma or other natural break
-        const breakChars = [",", ";", ":", "-"];
-        let bestBreak = -1;
-        for (const char of breakChars) {
-          const pos = point.lastIndexOf(char, maxLength);
-          if (pos > bestBreak && pos > maxLength * 0.6) {
-            bestBreak = pos;
-          }
+      // Try to find a natural breaking point near the end
+      const breakChars = [",", ";", ":", "-"];
+      let bestBreak = -1;
+
+      // Look for natural breaks in the last portion of the sentence
+      for (const char of breakChars) {
+        const pos = point.lastIndexOf(char, maxLength);
+        if (pos > bestBreak && pos > maxLength * 0.8) { // Require break to be very close to limit
+          bestBreak = pos;
         }
-        if (bestBreak > 0) {
-          point = point.substring(0, bestBreak + 1); // Include the break character
+      }
+
+      if (bestBreak > 0) {
+        point = point.substring(0, bestBreak + 1); // Include the break character
+      } else {
+        // Find the last space before the limit
+        const lastSpace = point.lastIndexOf(" ", maxLength);
+        if (lastSpace > maxLength * 0.9) { // Very conservative truncation
+          point = point.substring(0, lastSpace) + "...";
         } else {
-          // Force break at word boundary if possible
-          const forcedBreak = point.lastIndexOf(" ", maxLength);
-          if (forcedBreak > 0) {
-            point = point.substring(0, forcedBreak) + "...";
-          } else {
-            point = point.substring(0, maxLength - 3) + "...";
-          }
+          // Keep the sentence mostly intact
+          point = point.substring(0, maxLength - 3) + "...";
         }
       }
     }
+
     points.push(point);
   }
 
@@ -110,27 +127,43 @@ function extractBulletPoints(summary: string): string[] {
 function extractTitle(summary: string): string {
   const firstSentence = summary.split(/[.!?]/)[0]?.trim() || "";
 
-  // If first sentence is short enough, use it
-  if (firstSentence.length <= 60) {
+  // Much more generous limit - only truncate if extremely long
+  if (firstSentence.length <= 80) {
     return firstSentence;
   }
 
-  // Try to cut at a natural word boundary with more generous limits
-  const maxLength = 55;
+  // Try to cut at a natural word boundary with generous limits
+  const maxLength = 75;
   const truncated = firstSentence.substring(0, maxLength);
-  const lastSpace = truncated.lastIndexOf(" ");
 
-  if (lastSpace > maxLength * 0.6) {
+  // Look for natural breaks first
+  const breakChars = [",", ";", ":", "-"];
+  let bestBreak = -1;
+
+  for (const char of breakChars) {
+    const pos = truncated.lastIndexOf(char);
+    if (pos > bestBreak && pos > maxLength * 0.8) {
+      bestBreak = pos;
+    }
+  }
+
+  if (bestBreak > 0) {
+    return firstSentence.substring(0, bestBreak + 1);
+  }
+
+  // Find the last space before the limit
+  const lastSpace = truncated.lastIndexOf(" ");
+  if (lastSpace > maxLength * 0.9) {
     return truncated.substring(0, lastSpace) + "...";
   }
 
-  // Extract more key words if needed
-  const words = firstSentence.split(" ").slice(0, 8).join(" ");
+  // Extract key words if needed
+  const words = firstSentence.split(" ").slice(0, 10).join(" ");
   if (words.length <= maxLength) {
     return words;
   }
 
-  // Final fallback - force break at space
+  // Very conservative truncation
   const forceBreak = firstSentence.lastIndexOf(" ", maxLength);
   if (forceBreak > 0) {
     return firstSentence.substring(0, forceBreak) + "...";
