@@ -56,6 +56,8 @@ const FREE_DOWNLOAD_LIMIT = 1;
 const PRO_DOWNLOAD_CREDITS = 10;
 const STORAGE_KEY = "blog2visuals_downloads";
 const CREDITS_KEY = "blog2visuals_credits";
+const SESSION_LINK_KEY = "blog2visuals_session_link_processed";
+const SESSION_FIRST_GENERATION_KEY = "blog2visuals_session_first_generation";
 
 export default function Home() {
   const { isAuthenticated, user } = useAuth();
@@ -76,6 +78,8 @@ export default function Home() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [currency, setCurrency] = useState<Currency>("INR");
   const [priceConfig, setPriceConfig] = useState<PriceConfig>(getPriceConfig("INR"));
+  const [hasProcessedLink, setHasProcessedLink] = useState(false);
+  const [hasGeneratedFirstInfographic, setHasGeneratedFirstInfographic] = useState(false);
   const infographicRef = useRef<HTMLDivElement>(null);
   const blogUrlInputRef = useRef<HTMLInputElement>(null);
   const trySectionRef = useRef<HTMLDivElement>(null);
@@ -115,6 +119,15 @@ export default function Home() {
     const detectedCurrency = detectCurrency();
     setCurrency(detectedCurrency);
     setPriceConfig(getPriceConfig(detectedCurrency));
+  }, []);
+
+  // Load session state on mount
+  useEffect(() => {
+    const linkProcessed = sessionStorage.getItem(SESSION_LINK_KEY) === "true";
+    const firstGenerationDone = sessionStorage.getItem(SESSION_FIRST_GENERATION_KEY) === "true";
+
+    setHasProcessedLink(linkProcessed);
+    setHasGeneratedFirstInfographic(firstGenerationDone);
   }, []);
 
   // Deep-link support: /?try=1#try scrolls to input and focuses it
@@ -421,7 +434,19 @@ export default function Home() {
 
   const handleGenerate = async () => {
     if (!blogUrl.trim()) return;
-    
+
+    // Check if user has already processed a link in this session
+    if (hasProcessedLink && !isAuthenticated) {
+      setError("You've already processed one link in this session. Please sign in to continue using the service.");
+      return;
+    }
+
+    // Check if user has generated their first infographic and needs to login
+    if (hasGeneratedFirstInfographic && !isAuthenticated) {
+      setError("You've generated your first infographic! Please sign in to continue creating more.");
+      return;
+    }
+
     setError(null);
     setStep("extracting");
     setContent("");
@@ -446,6 +471,10 @@ export default function Home() {
       // Store the extracted content
       setContent(scrapeData.content);
       setStep("summarizing");
+
+      // Mark that user has processed a link in this session
+      setHasProcessedLink(true);
+      sessionStorage.setItem(SESSION_LINK_KEY, "true");
 
       // Step 2: Summarize the content
       const summarizeResponse = await fetch("/api/summarize", {
@@ -529,6 +558,12 @@ export default function Home() {
     }
 
     setStep("result");
+
+    // Mark that user has generated their first infographic in this session
+    if (!hasGeneratedFirstInfographic) {
+      setHasGeneratedFirstInfographic(true);
+      sessionStorage.setItem(SESSION_FIRST_GENERATION_KEY, "true");
+    }
   };
 
   const handleCopyToClipboard = async (text: string, field: string) => {
@@ -872,16 +907,24 @@ export default function Home() {
                     type="url"
                     value={blogUrl}
                     onChange={(e) => setBlogUrl(e.target.value)}
-                    placeholder="Paste your blog URL here..."
+                    placeholder={
+                      hasProcessedLink && !isAuthenticated
+                        ? "Sign in to process another link..."
+                        : "Paste your blog URL here..."
+                    }
                     className="flex-1 bg-transparent text-white placeholder-stone-500 outline-none py-3 text-base"
                     onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleGenerate()}
-                    disabled={isLoading || showSummary || showResult}
+                    disabled={isLoading || showSummary || showResult || (hasProcessedLink && !isAuthenticated)}
                   />
                 </div>
                 <button
                   onClick={handleGenerate}
-                  disabled={isLoading || !blogUrl.trim() || showSummary || showResult}
-                  className="flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 disabled:from-stone-700 disabled:to-stone-700 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 disabled:shadow-none"
+                  disabled={isLoading || !blogUrl.trim() || showSummary || showResult || (hasProcessedLink && !isAuthenticated)}
+                  className={`flex items-center justify-center gap-2 px-6 py-3.5 font-semibold rounded-xl transition-all duration-300 shadow-lg disabled:shadow-none ${
+                    hasProcessedLink && !isAuthenticated
+                      ? "bg-stone-700 text-stone-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-orange-500/25 hover:shadow-orange-500/40"
+                  }`}
                 >
                   {isLoading ? (
                     <>
@@ -928,20 +971,41 @@ export default function Home() {
               </div>
             )}
 
-            {/* Quick suggestions */}
+            {/* Quick suggestions or sign-in prompt */}
             {step === "input" && !error && (
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
-                <span className="text-stone-500">Try:</span>
-                {['medium.com', 'dev.to', 'hashnode.com'].map((site) => (
-                  <button
-                    key={site}
-                    onClick={() => setBlogUrl(`https://${site}/example-article`)}
-                    className="px-3 py-1 rounded-lg bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 transition-all"
-                  >
-                    {site}
-                  </button>
-                ))}
-              </div>
+              <>
+                {hasProcessedLink && !isAuthenticated ? (
+                  <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20">
+                    <div className="text-center">
+                      <p className="text-orange-400 font-semibold mb-2">Ready for more infographics?</p>
+                      <p className="text-stone-300 text-sm mb-4">Sign in to process unlimited links and create amazing visuals!</p>
+                      <Link
+                        href="/login"
+                        className="inline-flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                        </svg>
+                        Sign In to Continue
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
+                    <span className="text-stone-500">Try:</span>
+                    {['medium.com', 'dev.to', 'hashnode.com'].map((site) => (
+                      <button
+                        key={site}
+                        onClick={() => setBlogUrl(`https://${site}/example-article`)}
+                        className="px-3 py-1 rounded-lg bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 transition-all"
+                        disabled={hasProcessedLink && !isAuthenticated}
+                      >
+                        {site}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1035,8 +1099,8 @@ export default function Home() {
                     </h3>
                     <p className="text-emerald-400 text-sm mt-1">
                       Ready to generate your infographic
-                    </p>
-                  </div>
+          </p>
+        </div>
                 </div>
 
                 {/* Progress Steps */}
@@ -1119,7 +1183,7 @@ export default function Home() {
                     </svg>
                     Start Over
                   </button>
-                </div>
+        </div>
               </div>
             </div>
           )}
